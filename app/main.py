@@ -16,48 +16,44 @@ def main() -> int:
     # Apply a monochrome palette to match the design direction.
     palette = app.palette()
 
-    def resolve_role(name: str) -> QPalette.ColorRole | int | None:
-        """Return a palette role value that is compatible with the Qt build."""
+    # Qt 6 exposes colour roles under QPalette.ColorRole, while older builds
+    # still allow access directly on QPalette. Grab whichever namespace exists
+    # so we can safely reference the roles without touching the palette
+    # instance itself (e.g. ``palette.Window``), which raises AttributeError.
+    color_roles = getattr(QPalette, "ColorRole", QPalette)
 
-        color_role_enum = getattr(QPalette, "ColorRole", None)
-        if color_role_enum is not None:
-            role = getattr(color_role_enum, name, None)
-            if role is not None:
-                return role
-        return getattr(QPalette, name, None)
+    def adjust(role: QPalette.ColorRole, factor: int, lighten: bool = False) -> None:
+        """Darken/lighten the given palette role if it is supported."""
 
-    def adjust(role_name: str, factor: int, lighten: bool = False) -> None:
-        role = resolve_role(role_name)
         if role is None:
             return
 
         try:
             base = palette.color(role)
-        except AttributeError:
-            # Some Qt builds can resolve the role constant but still refuse to
-            # accept it when querying colours; skip in that case so launching
-            # never fails.
+        except (AttributeError, TypeError):
+            # Some Qt builds may refuse the role even though it exists; skip it
+            # so launch never fails.
             return
 
         new_color = base.lighter(factor) if lighten else base.darker(factor)
         palette.setColor(role, new_color)
 
     # The palette roles that need tweaks to achieve the monochrome aesthetic.
-    adjustments: dict[str, tuple[int, bool]] = {
-        "Window": (160, False),
-        "WindowText": (180, True),
-        "Base": (180, False),
-        "AlternateBase": (160, False),
-        "ToolTipBase": (180, True),
-        "ToolTipText": (180, True),
-        "Text": (200, True),
-        "Button": (180, False),
-        "ButtonText": (180, True),
-        "BrightText": (200, True),
+    adjustments: dict[QPalette.ColorRole, tuple[int, bool]] = {
+        getattr(color_roles, "Window", None): (160, False),
+        getattr(color_roles, "WindowText", None): (180, True),
+        getattr(color_roles, "Base", None): (180, False),
+        getattr(color_roles, "AlternateBase", None): (160, False),
+        getattr(color_roles, "ToolTipBase", None): (180, True),
+        getattr(color_roles, "ToolTipText", None): (180, True),
+        getattr(color_roles, "Text", None): (200, True),
+        getattr(color_roles, "Button", None): (180, False),
+        getattr(color_roles, "ButtonText", None): (180, True),
+        getattr(color_roles, "BrightText", None): (200, True),
     }
 
-    for role_name, (factor, lighten) in adjustments.items():
-        adjust(role_name, factor, lighten)
+    for role, (factor, lighten) in adjustments.items():
+        adjust(role, factor, lighten)
 
     app.setPalette(palette)
 
