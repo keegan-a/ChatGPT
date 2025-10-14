@@ -6,7 +6,9 @@ A monochrome desktop application for exploring over forty dithering and halftone
 
 - Load any raster image and preview changes in real time thanks to a background processing queue and down-scaled preview renders.
 - Choose from a variety of error-diffusion and modulation algorithms including Floyd–Steinberg, Jarvis–Judice–Ninke, blue-noise clustering, spiral/line/dot screens, glitch strata, and more.
-- Adjust threshold, amplitude, frequency, period, slope, rotation, glow, noise, sharpening, and per-channel colour scaling.
+- Blue-noise clustering and other creative modes have been tuned for stable output without random failures.
+- Adjust threshold plus algorithm-specific parameters (amplitude, frequency, period, slope, rotation) with controls that enable only when the selected shader uses them.
+- Dial in block size with the new pixel-size control to down-sample before dithering for chunkier, faster renders when desired.
 - Switch between RGB balance, monochrome luma, indexed 4/8 levels, retro 16-bit/8-bit quantisation, neon and CMYK composite modes.
 - Explore a library of vintage palettes (Game Boy, CGA, Commodore 64, ZX Spectrum, CMYK print, vaporwave, etc.) or dial in a custom two-tone map alongside RGB channel scaling (0–200%).
 - Creative tone sculpting with gamma, contrast, saturation, hue shift, edge emphasis, vignette strength, invert, posterise, and original-image blend controls.
@@ -56,7 +58,7 @@ Once the window opens you can load an image with the toolbar button and start ex
 
 ## Performance notes
 
-- Real-time previews are rendered against a down-scaled copy of the original image while full-resolution renders are dispatched on demand.
+- Real-time previews are rendered against a down-scaled copy of the original image (with extra reductions for heavy diffusion algorithms) while full-resolution renders are dispatched on demand.
 - Preview requests are coalesced and cached so only the most recent slider changes trigger work, keeping feedback immediate.
 - All heavy lifting is handled with NumPy arrays for vectorised operations.
 - The processing pipeline runs on a tuned thread pool so the UI remains responsive, even for large source images.

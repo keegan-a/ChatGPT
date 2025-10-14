@@ -10,7 +10,7 @@ from PIL import Image, ImageEnhance, ImageFilter
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QImage
 
-from app.core.dithering import DITHER_ALGORITHMS
+from app.core.dithering import DITHER_ALGORITHMS, algorithm_spec
 from app.core.models import ProcessingRequest
 from app.core.utils import convert_qimage
 
@@ -234,7 +234,9 @@ class ImageProcessor(QObject):
 
         source = self._source_image if request.full_resolution else self._preview_source or self._source_image
 
-        processed = self._apply_pipeline(source, request)
+        spec = algorithm_spec(request.algorithm)
+        preview_downsample = spec.preview_downsample if is_preview else 1
+        processed = self._apply_pipeline(source, request, preview_downsample)
 
         qimage = convert_qimage(processed)
         if request.full_resolution:
@@ -250,8 +252,25 @@ class ImageProcessor(QObject):
         self.processed.emit(qimage, request.full_resolution)
 
     # ----------------------------------------------------------------- Pipeline
-    def _apply_pipeline(self, image: Image.Image, request: ProcessingRequest) -> Image.Image:
-        base = np.asarray(image.convert("RGB"), dtype=np.float32)
+    def _apply_pipeline(
+        self,
+        image: Image.Image,
+        request: ProcessingRequest,
+        preview_downsample: int = 1,
+    ) -> Image.Image:
+        original_size = image.size
+        downsample_factor = max(1, preview_downsample)
+        working_image = image
+        if downsample_factor > 1:
+            reduced_size = (
+                max(1, original_size[0] // downsample_factor),
+                max(1, original_size[1] // downsample_factor),
+            )
+            working_image = image.resize(reduced_size, Image.BOX)
+
+        pixelated_image, pixel_return_size = self._apply_pixel_size(working_image, request.pixel_size)
+
+        base = np.asarray(pixelated_image, dtype=np.float32)
         working = base.copy()
         working = self._apply_colour_controls(working, request)
         working = self._apply_tone_controls(working, request)
@@ -262,7 +281,30 @@ class ImageProcessor(QObject):
         dithered = algorithm(working, request)
 
         processed = self._apply_post_processing(dithered, toned_reference, base, request)
-        return Image.fromarray(processed)
+        output = Image.fromarray(processed)
+
+        if pixel_return_size is not None:
+            output = output.resize(pixel_return_size, Image.NEAREST)
+
+        if downsample_factor > 1:
+            output = output.resize(original_size, Image.NEAREST)
+
+        return output
+
+    def _apply_pixel_size(
+        self, image: Image.Image, pixel_size: int
+    ) -> tuple[Image.Image, tuple[int, int] | None]:
+        pixel_size = max(1, pixel_size)
+        image = image.convert("RGB")
+        if pixel_size == 1:
+            return image, None
+
+        reduced_size = (
+            max(1, image.width // pixel_size),
+            max(1, image.height // pixel_size),
+        )
+        reduced = image.resize(reduced_size, Image.BOX)
+        return reduced, image.size
 
     def _apply_colour_controls(self, image: np.ndarray, request: ProcessingRequest) -> np.ndarray:
         scales = np.array([

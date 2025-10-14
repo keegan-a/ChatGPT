@@ -12,6 +12,7 @@ class ProcessingRequest:
     frequency: int
     period: int
     slope: float
+    pixel_size: int
     glow_radius: int
     noise_level: float
     sharpen_amount: float

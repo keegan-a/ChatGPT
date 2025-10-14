@@ -1,11 +1,22 @@
 """Collection of dithering algorithms used by the studio."""
 from __future__ import annotations
 
+import math
+from dataclasses import dataclass
+from functools import lru_cache
 from typing import Callable, Dict
 
 import numpy as np
 
 from app.core.models import ProcessingRequest
+
+
+@dataclass(frozen=True)
+class AlgorithmSpec:
+    """Metadata describing how a dithering algorithm should behave."""
+
+    parameters: tuple[str, ...]
+    preview_downsample: int = 1
 
 
 def floyd_steinberg(image: np.ndarray, request: ProcessingRequest) -> np.ndarray:
@@ -112,18 +123,15 @@ def random_threshold(image: np.ndarray, request: ProcessingRequest) -> np.ndarra
 
 
 def blue_noise_cluster(image: np.ndarray, request: ProcessingRequest) -> np.ndarray:
-    rng = np.random.default_rng()
-    base = rng.normal(0.0, 1.0, size=image.shape[:2])
-    for _ in range(max(1, request.period // 2)):
-        base = (
-            base
-            + np.roll(base, 1, axis=0)
-            + np.roll(base, -1, axis=0)
-            + np.roll(base, 1, axis=1)
-            + np.roll(base, -1, axis=1)
-        ) / 5.0
-    base = (base - base.min()) / (base.ptp() + 1e-5)
-    pattern = (base - 0.5) * 2.0
+    tile = _blue_noise_tile()
+    height, width = image.shape[:2]
+    scale = max(1, request.period // 4)
+    if scale > 1:
+        tile = np.repeat(np.repeat(tile, scale, axis=0), scale, axis=1)
+    reps_y = math.ceil(height / tile.shape[0])
+    reps_x = math.ceil(width / tile.shape[1])
+    pattern = np.tile(tile, (reps_y, reps_x))[:height, :width]
+    pattern = (pattern - 0.5) * 2.0
     modulated = image + request.amplitude * pattern[..., None] * 255
     return _threshold(modulated, request.threshold)
 
@@ -189,6 +197,22 @@ def glitch_strata(image: np.ndarray, request: ProcessingRequest) -> np.ndarray:
 
 # ----------------------------------------------------------------- Shared helpers
 
+@lru_cache(maxsize=1)
+def _blue_noise_tile(size: int = 64) -> np.ndarray:
+    rng = np.random.default_rng(1337)
+    tile = rng.random((size, size), dtype=np.float32)
+    for _ in range(5):
+        blurred = (
+            np.roll(tile, 1, axis=0)
+            + np.roll(tile, -1, axis=0)
+            + np.roll(tile, 1, axis=1)
+            + np.roll(tile, -1, axis=1)
+        ) / 4.0
+        tile = np.clip(tile * 1.5 - blurred * 0.5, 0.0, 1.0)
+    tile = tile - tile.min()
+    tile = tile / (tile.ptp() + 1e-6)
+    return tile.astype(np.float32)
+
 def _error_diffusion(image: np.ndarray, request: ProcessingRequest, diffusion_matrix: dict[tuple[int, int], float]) -> np.ndarray:
     height, width, channels = image.shape
     buffer = image.copy()
@@ -230,6 +254,37 @@ DITHER_ALGORITHMS: Dict[str, Callable[[np.ndarray, ProcessingRequest], np.ndarra
     "Diamond Mesh": diamond_mesh,
     "Glitch Strata": glitch_strata,
 }
+
+
+ALGORITHM_SPECS: Dict[str, AlgorithmSpec] = {
+    "Floyd-Steinberg": AlgorithmSpec(parameters=(), preview_downsample=2),
+    "Jarvis-Judice-Ninke": AlgorithmSpec(parameters=(), preview_downsample=3),
+    "Sierra": AlgorithmSpec(parameters=(), preview_downsample=2),
+    "Row Modulation": AlgorithmSpec(parameters=("amplitude", "period")),
+    "Column Modulation": AlgorithmSpec(parameters=("amplitude", "period")),
+    "Dispersed Modulation": AlgorithmSpec(parameters=("amplitude", "period", "frequency")),
+    "Medium Modulation": AlgorithmSpec(parameters=("amplitude", "frequency")),
+    "Heavy Modulation": AlgorithmSpec(parameters=("amplitude",)),
+    "Circuit Modulation": AlgorithmSpec(parameters=("amplitude", "frequency", "period")),
+    "Tilt Modulation": AlgorithmSpec(parameters=("amplitude", "slope", "period")),
+    "Pattern Matrix": AlgorithmSpec(parameters=("amplitude",)),
+    "Random Threshold": AlgorithmSpec(parameters=("amplitude",)),
+    "Blue Noise Cluster": AlgorithmSpec(parameters=("amplitude", "period"), preview_downsample=2),
+    "Dot Screen": AlgorithmSpec(parameters=("amplitude", "period", "rotation")),
+    "Line Screen": AlgorithmSpec(parameters=("amplitude", "period", "frequency", "rotation")),
+    "Radial Rings": AlgorithmSpec(parameters=("amplitude", "period", "frequency")),
+    "Spiral Waves": AlgorithmSpec(parameters=("amplitude", "period", "frequency", "slope")),
+    "Diamond Mesh": AlgorithmSpec(parameters=("amplitude", "period", "rotation")),
+    "Glitch Strata": AlgorithmSpec(parameters=("amplitude", "period", "frequency")),
+}
+
+_DEFAULT_SPEC = AlgorithmSpec(parameters=())
+
+
+def algorithm_spec(name: str) -> AlgorithmSpec:
+    """Return algorithm metadata, falling back to a default spec."""
+
+    return ALGORITHM_SPECS.get(name, _DEFAULT_SPEC)
 
 
 def _rotated_coordinates(shape: tuple[int, int], rotation: float) -> tuple[np.ndarray, np.ndarray]:

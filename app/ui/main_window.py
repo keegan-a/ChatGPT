@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from app.core.dithering import algorithm_spec
 from app.core.image_processor import ImageProcessor
 from app.core.models import ProcessingRequest
 from app.core.presets import PresetManager
@@ -138,7 +139,7 @@ class MainWindow(QMainWindow):
 
         self._algorithm_combo = QComboBox()
         self._algorithm_combo.addItems(self._processor.available_algorithms)
-        self._algorithm_combo.currentTextChanged.connect(self._queue_update)
+        self._algorithm_combo.currentTextChanged.connect(self._on_algorithm_changed)
         layout.addRow("Algorithm", self._algorithm_combo)
 
         self._threshold_slider = self._make_slider(0, 255, 127, self._queue_update)
@@ -158,6 +159,22 @@ class MainWindow(QMainWindow):
 
         self._rotation_slider = self._make_slider(-90, 90, 0, self._queue_update)
         layout.addRow("Rotation", self._rotation_slider)
+
+        self._pixel_size_slider = self._make_slider(1, 32, 1, self._queue_update)
+        layout.addRow("Pixel Size", self._pixel_size_slider)
+
+        self._parameter_widgets = {
+            "amplitude": self._amplitude_slider,
+            "frequency": self._frequency_slider,
+            "period": self._period_slider,
+            "slope": self._slope_slider,
+            "rotation": self._rotation_slider,
+        }
+        self._parameter_labels = {
+            name: layout.labelForField(widget) for name, widget in self._parameter_widgets.items()
+        }
+
+        self._on_algorithm_changed(self._algorithm_combo.currentText())
 
         return box
 
@@ -344,6 +361,7 @@ class MainWindow(QMainWindow):
             "period": self._period_slider.value(),
             "slope": self._slope_slider.value(),
             "rotation": self._rotation_slider.value(),
+            "pixel_size": self._pixel_size_slider.value(),
             "glow": self._glow_slider.value(),
             "noise": self._noise_slider.value(),
             "sharpen": self._sharpness_slider.value(),
@@ -378,6 +396,7 @@ class MainWindow(QMainWindow):
         set_value(self._period_slider, "period", self._period_slider.setValue)
         set_value(self._slope_slider, "slope", self._slope_slider.setValue)
         set_value(self._rotation_slider, "rotation", self._rotation_slider.setValue)
+        set_value(self._pixel_size_slider, "pixel_size", self._pixel_size_slider.setValue)
         set_value(self._glow_slider, "glow", self._glow_slider.setValue)
         set_value(self._noise_slider, "noise", self._noise_slider.setValue)
         set_value(self._sharpness_slider, "sharpen", self._sharpness_slider.setValue)
@@ -400,6 +419,17 @@ class MainWindow(QMainWindow):
         set_value(self._palette_combo, "two_colour_mode", self._palette_combo.setCurrentText)
         self._on_palette_changed(self._palette_combo.currentText())
 
+    def _on_algorithm_changed(self, algorithm: str) -> None:
+        spec = algorithm_spec(algorithm)
+        active = set(spec.parameters)
+        for name, widget in self._parameter_widgets.items():
+            enabled = name in active
+            widget.setEnabled(enabled)
+            label = self._parameter_labels.get(name)
+            if label is not None:
+                label.setEnabled(enabled)
+        self._queue_update()
+
     def _queue_update(self) -> None:
         if not self._processor.has_image:
             return
@@ -410,6 +440,7 @@ class MainWindow(QMainWindow):
             frequency=self._frequency_slider.value(),
             period=self._period_slider.value(),
             slope=self._slope_slider.value() / 100.0,
+            pixel_size=self._pixel_size_slider.value(),
             glow_radius=self._glow_slider.value(),
             noise_level=self._noise_slider.value() / 100.0,
             sharpen_amount=self._sharpness_slider.value() / 100.0,
@@ -459,6 +490,7 @@ class MainWindow(QMainWindow):
             frequency=self._frequency_slider.value(),
             period=self._period_slider.value(),
             slope=self._slope_slider.value() / 100.0,
+            pixel_size=self._pixel_size_slider.value(),
             glow_radius=self._glow_slider.value(),
             noise_level=self._noise_slider.value() / 100.0,
             sharpen_amount=self._sharpness_slider.value() / 100.0,
