@@ -439,9 +439,7 @@ class ImageProcessor(QObject):
         result = np.clip(image, 0, 255).astype(np.float32)
 
         if request.glow_radius > 0:
-            pil_img = Image.fromarray(result.astype(np.uint8))
-            pil_img = pil_img.filter(ImageFilter.GaussianBlur(request.glow_radius))
-            result = np.asarray(pil_img, dtype=np.float32)
+            result = self._apply_glow(result, toned_reference, request.glow_radius)
 
         if request.sharpen_amount > 0:
             pil_img = Image.fromarray(result.astype(np.uint8))
@@ -467,6 +465,18 @@ class ImageProcessor(QObject):
             result = (result * (1.0 - blend) + toned_reference * blend).astype(np.float32)
 
         return np.clip(result, 0, 255).astype(np.uint8)
+
+    def _apply_glow(self, image: np.ndarray, reference: np.ndarray, radius: int) -> np.ndarray:
+        radius = max(1, radius)
+        luminance = np.dot(reference[..., :3], np.array([0.2126, 0.7152, 0.0722], dtype=np.float32))
+        mask = np.clip((luminance - 160.0) / 95.0, 0.0, 1.0) ** 1.2
+        highlight = np.clip(reference * mask[..., None], 0, 255).astype(np.uint8)
+
+        glow_source = Image.fromarray(highlight)
+        blurred = glow_source.filter(ImageFilter.GaussianBlur(radius))
+        glow = np.asarray(blurred, dtype=np.float32)
+        strength = np.clip(radius / 12.0, 0.15, 1.2)
+        return np.clip(image + glow * strength, 0, 255)
 
     def _apply_contrast(self, image: np.ndarray, contrast: float) -> np.ndarray:
         factor = max(contrast, 0.0)

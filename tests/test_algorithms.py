@@ -55,7 +55,8 @@ def test_colour_modes_and_palettes_exposed():
 
 def test_algorithm_spec_flags_controls():
     diffusion_spec = algorithm_spec("Floyd-Steinberg")
-    assert "amplitude" not in diffusion_spec.parameters
+    assert "amplitude" in diffusion_spec.parameters
+    assert diffusion_spec.parameter_labels.get("amplitude") == "Error Spread"
     assert diffusion_spec.preview_downsample >= 1
 
     screen_spec = algorithm_spec("Dot Screen")

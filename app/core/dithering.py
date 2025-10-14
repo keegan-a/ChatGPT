@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Callable, Dict
 
@@ -12,11 +12,45 @@ from app.core.models import ProcessingRequest
 
 
 @dataclass(frozen=True)
+class ParameterInfo:
+    """Default display information for a configurable parameter."""
+
+    label: str
+    tooltip: str
+
+
+PARAMETER_INFO: Dict[str, ParameterInfo] = {
+    "amplitude": ParameterInfo(
+        label="Pattern Strength",
+        tooltip="Controls how strongly the algorithm pushes tones into bright or dark clusters.",
+    ),
+    "frequency": ParameterInfo(
+        label="Pattern Detail",
+        tooltip="Adjusts the density of repeating motifs or secondary interference textures.",
+    ),
+    "period": ParameterInfo(
+        label="Pattern Scale",
+        tooltip="Sets the overall spacing of the dither grid or modulation stripes.",
+    ),
+    "slope": ParameterInfo(
+        label="Directional Bias",
+        tooltip="Tilts line-based patterns by skewing how quickly they advance vertically.",
+    ),
+    "rotation": ParameterInfo(
+        label="Pattern Angle",
+        tooltip="Rotates screen-based patterns for cross-hatching and halftone alignment.",
+    ),
+}
+
+
+@dataclass(frozen=True)
 class AlgorithmSpec:
     """Metadata describing how a dithering algorithm should behave."""
 
     parameters: tuple[str, ...]
     preview_downsample: int = 1
+    parameter_labels: Dict[str, str] = field(default_factory=dict)
+    parameter_tooltips: Dict[str, str] = field(default_factory=dict)
 
 
 def floyd_steinberg(image: np.ndarray, request: ProcessingRequest) -> np.ndarray:
@@ -123,17 +157,22 @@ def random_threshold(image: np.ndarray, request: ProcessingRequest) -> np.ndarra
 
 
 def blue_noise_cluster(image: np.ndarray, request: ProcessingRequest) -> np.ndarray:
-    tile = _blue_noise_tile()
+    """Void-and-cluster inspired ordered dithering using a blue-noise threshold map."""
+
     height, width = image.shape[:2]
-    scale = max(1, request.period // 4)
-    if scale > 1:
-        tile = np.repeat(np.repeat(tile, scale, axis=0), scale, axis=1)
+    base_size = max(8, int(request.period * 4))
+    tile = _blue_noise_tile(base_size)
     reps_y = math.ceil(height / tile.shape[0])
     reps_x = math.ceil(width / tile.shape[1])
-    pattern = np.tile(tile, (reps_y, reps_x))[:height, :width]
-    pattern = (pattern - 0.5) * 2.0
-    modulated = image + request.amplitude * pattern[..., None] * 255
-    return _threshold(modulated, request.threshold)
+    threshold_map = np.tile(tile, (reps_y, reps_x))[:height, :width]
+    threshold_map = threshold_map * 255.0
+
+    strength = np.clip(request.amplitude, 0.0, 3.0)
+    spread = (threshold_map - 127.5) * strength
+    adaptive_threshold = np.clip(request.threshold + spread, 0.0, 255.0)
+    adaptive_threshold = adaptive_threshold[..., None]
+
+    return np.where(image > adaptive_threshold, 255.0, 0.0)
 
 
 def dot_screen(image: np.ndarray, request: ProcessingRequest) -> np.ndarray:
@@ -199,30 +238,44 @@ def glitch_strata(image: np.ndarray, request: ProcessingRequest) -> np.ndarray:
 
 @lru_cache(maxsize=1)
 def _blue_noise_tile(size: int = 64) -> np.ndarray:
-    rng = np.random.default_rng(1337)
-    tile = rng.random((size, size), dtype=np.float32)
-    for _ in range(5):
-        blurred = (
-            np.roll(tile, 1, axis=0)
-            + np.roll(tile, -1, axis=0)
-            + np.roll(tile, 1, axis=1)
-            + np.roll(tile, -1, axis=1)
-        ) / 4.0
-        tile = np.clip(tile * 1.5 - blurred * 0.5, 0.0, 1.0)
-    tile = tile - tile.min()
-    tile = tile / (tile.ptp() + 1e-6)
-    return tile.astype(np.float32)
+    """Generate a repeatable blue-noise tile via frequency-domain shaping."""
 
-def _error_diffusion(image: np.ndarray, request: ProcessingRequest, diffusion_matrix: dict[tuple[int, int], float]) -> np.ndarray:
+    rng = np.random.default_rng(1337 + size)
+    noise = rng.standard_normal((size, size), dtype=np.float32)
+    freq = np.fft.fftn(noise)
+
+    fy = np.fft.fftfreq(size, d=1.0).astype(np.float32)[:, None]
+    fx = np.fft.fftfreq(size, d=1.0).astype(np.float32)[None, :]
+    radius = np.sqrt(fx**2 + fy**2)
+
+    # Emphasise mid-frequency energy while damping low/high extremes for blue-noise behaviour.
+    bandpass = np.exp(-((radius - 0.28) ** 2) / (2 * 0.08**2)).astype(np.float32)
+    bandpass[0, 0] = 0.0
+
+    shaped = np.fft.ifftn(freq * bandpass).real.astype(np.float32)
+    shaped -= shaped.min()
+    shaped /= shaped.ptp() + 1e-6
+    return shaped
+
+def _error_diffusion(
+    image: np.ndarray,
+    request: ProcessingRequest,
+    diffusion_matrix: dict[tuple[int, int], float],
+) -> np.ndarray:
     height, width, channels = image.shape
     buffer = image.copy()
+    error_gain = np.clip(request.amplitude, 0.0, 3.0)
+    diffusion = {offset: weight * error_gain for offset, weight in diffusion_matrix.items()}
+    threshold = np.clip(request.threshold, 0.0, 255.0)
     for y in range(height):
         for x in range(width):
             old_pixel = buffer[y, x].copy()
-            new_pixel = np.where(old_pixel > request.threshold, 255.0, 0.0)
+            new_pixel = np.where(old_pixel > threshold, 255.0, 0.0)
             buffer[y, x] = new_pixel
             error = old_pixel - new_pixel
-            for (dx, dy), weight in diffusion_matrix.items():
+            if error_gain <= 0:
+                continue
+            for (dx, dy), weight in diffusion.items():
                 nx, ny = x + dx, y + dy
                 if 0 <= nx < width and 0 <= ny < height:
                     buffer[ny, nx] += error * weight
@@ -257,9 +310,24 @@ DITHER_ALGORITHMS: Dict[str, Callable[[np.ndarray, ProcessingRequest], np.ndarra
 
 
 ALGORITHM_SPECS: Dict[str, AlgorithmSpec] = {
-    "Floyd-Steinberg": AlgorithmSpec(parameters=(), preview_downsample=2),
-    "Jarvis-Judice-Ninke": AlgorithmSpec(parameters=(), preview_downsample=3),
-    "Sierra": AlgorithmSpec(parameters=(), preview_downsample=2),
+    "Floyd-Steinberg": AlgorithmSpec(
+        parameters=("amplitude",),
+        preview_downsample=2,
+        parameter_labels={"amplitude": "Error Spread"},
+        parameter_tooltips={
+            "amplitude": "Scale how far quantisation error is diffused to surrounding pixels.",
+        },
+    ),
+    "Jarvis-Judice-Ninke": AlgorithmSpec(
+        parameters=("amplitude",),
+        preview_downsample=3,
+        parameter_labels={"amplitude": "Error Spread"},
+    ),
+    "Sierra": AlgorithmSpec(
+        parameters=("amplitude",),
+        preview_downsample=2,
+        parameter_labels={"amplitude": "Error Spread"},
+    ),
     "Row Modulation": AlgorithmSpec(parameters=("amplitude", "period")),
     "Column Modulation": AlgorithmSpec(parameters=("amplitude", "period")),
     "Dispersed Modulation": AlgorithmSpec(parameters=("amplitude", "period", "frequency")),
@@ -267,9 +335,25 @@ ALGORITHM_SPECS: Dict[str, AlgorithmSpec] = {
     "Heavy Modulation": AlgorithmSpec(parameters=("amplitude",)),
     "Circuit Modulation": AlgorithmSpec(parameters=("amplitude", "frequency", "period")),
     "Tilt Modulation": AlgorithmSpec(parameters=("amplitude", "slope", "period")),
-    "Pattern Matrix": AlgorithmSpec(parameters=("amplitude",)),
-    "Random Threshold": AlgorithmSpec(parameters=("amplitude",)),
-    "Blue Noise Cluster": AlgorithmSpec(parameters=("amplitude", "period"), preview_downsample=2),
+    "Pattern Matrix": AlgorithmSpec(
+        parameters=("amplitude",),
+        parameter_labels={"amplitude": "Matrix Contrast"},
+    ),
+    "Random Threshold": AlgorithmSpec(
+        parameters=("amplitude",),
+        parameter_labels={"amplitude": "Noise Intensity"},
+    ),
+    "Blue Noise Cluster": AlgorithmSpec(
+        parameters=("amplitude", "period"),
+        preview_downsample=2,
+        parameter_labels={
+            "period": "Cluster Scale",
+            "amplitude": "Cluster Contrast",
+        },
+        parameter_tooltips={
+            "period": "Adjusts the base tile size used to repeat the void-and-cluster map.",
+        },
+    ),
     "Dot Screen": AlgorithmSpec(parameters=("amplitude", "period", "rotation")),
     "Line Screen": AlgorithmSpec(parameters=("amplitude", "period", "frequency", "rotation")),
     "Radial Rings": AlgorithmSpec(parameters=("amplitude", "period", "frequency")),

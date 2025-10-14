@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.core.dithering import algorithm_spec
+from app.core.dithering import PARAMETER_INFO, algorithm_spec
 from app.core.image_processor import ImageProcessor
 from app.core.models import ProcessingRequest
 from app.core.presets import PresetManager
@@ -77,6 +77,8 @@ class MainWindow(QMainWindow):
         self._preset_manager = PresetManager(Path.home() / ".dither_studio" / "presets")
 
         self._source_path: Path | None = None
+        self._pixel_size_steps: tuple[int, ...] = ()
+        self._pixel_size_label: QLabel | None = None
         self.statusBar()
         self._setup_ui()
 
@@ -143,25 +145,39 @@ class MainWindow(QMainWindow):
         layout.addRow("Algorithm", self._algorithm_combo)
 
         self._threshold_slider = self._make_slider(0, 255, 127, self._queue_update)
-        layout.addRow("Threshold", self._threshold_slider)
+        layout.addRow("Light Threshold", self._threshold_slider)
+        self._threshold_slider.setToolTip(
+            "Sets the luminance break-point between dark ink and light paper." 
+        )
 
-        self._amplitude_slider = self._make_slider(0, 200, 100, self._queue_update)
-        layout.addRow("Amplitude", self._amplitude_slider)
+        self._amplitude_slider = self._make_slider(0, 300, 150, self._queue_update)
+        layout.addRow(PARAMETER_INFO["amplitude"].label, self._amplitude_slider)
+        self._amplitude_slider.setToolTip(PARAMETER_INFO["amplitude"].tooltip)
 
-        self._frequency_slider = self._make_slider(1, 20, 5, self._queue_update)
-        layout.addRow("Frequency", self._frequency_slider)
+        self._frequency_slider = self._make_slider(1, 40, 10, self._queue_update)
+        layout.addRow(PARAMETER_INFO["frequency"].label, self._frequency_slider)
+        self._frequency_slider.setToolTip(PARAMETER_INFO["frequency"].tooltip)
 
-        self._period_slider = self._make_slider(1, 64, 8, self._queue_update)
-        layout.addRow("Period", self._period_slider)
+        self._period_slider = self._make_slider(1, 96, 12, self._queue_update)
+        layout.addRow(PARAMETER_INFO["period"].label, self._period_slider)
+        self._period_slider.setToolTip(PARAMETER_INFO["period"].tooltip)
 
-        self._slope_slider = self._make_slider(-100, 100, 0, self._queue_update)
-        layout.addRow("Slope", self._slope_slider)
+        self._slope_slider = self._make_slider(-150, 150, 0, self._queue_update)
+        layout.addRow(PARAMETER_INFO["slope"].label, self._slope_slider)
+        self._slope_slider.setToolTip(PARAMETER_INFO["slope"].tooltip)
 
-        self._rotation_slider = self._make_slider(-90, 90, 0, self._queue_update)
-        layout.addRow("Rotation", self._rotation_slider)
+        self._rotation_slider = self._make_slider(-135, 135, 0, self._queue_update)
+        layout.addRow(PARAMETER_INFO["rotation"].label, self._rotation_slider)
+        self._rotation_slider.setToolTip(PARAMETER_INFO["rotation"].tooltip)
 
-        self._pixel_size_slider = self._make_slider(1, 32, 1, self._queue_update)
-        layout.addRow("Pixel Size", self._pixel_size_slider)
+        self._pixel_size_steps = (1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24, 28, 32, 40, 48)
+        self._pixel_size_slider = self._make_slider(0, len(self._pixel_size_steps) - 1, 0, self._on_pixel_size_changed)
+        layout.addRow("Dither Resolution", self._pixel_size_slider)
+        self._pixel_size_slider.setToolTip(
+            "Down-sample the working image to emulate coarse pixels before halftoning."
+        )
+        self._pixel_size_label = layout.labelForField(self._pixel_size_slider)
+        self._on_pixel_size_changed(self._pixel_size_slider.value())
 
         self._parameter_widgets = {
             "amplitude": self._amplitude_slider,
@@ -170,9 +186,16 @@ class MainWindow(QMainWindow):
             "slope": self._slope_slider,
             "rotation": self._rotation_slider,
         }
-        self._parameter_labels = {
-            name: layout.labelForField(widget) for name, widget in self._parameter_widgets.items()
-        }
+        self._parameter_labels = {}
+        for name, widget in self._parameter_widgets.items():
+            label = layout.labelForField(widget)
+            if label is not None:
+                info = PARAMETER_INFO.get(name)
+                if info is not None:
+                    label.setText(info.label)
+                    label.setToolTip(info.tooltip)
+                    widget.setToolTip(info.tooltip)
+                self._parameter_labels[name] = label
 
         self._on_algorithm_changed(self._algorithm_combo.currentText())
 
@@ -361,7 +384,8 @@ class MainWindow(QMainWindow):
             "period": self._period_slider.value(),
             "slope": self._slope_slider.value(),
             "rotation": self._rotation_slider.value(),
-            "pixel_size": self._pixel_size_slider.value(),
+            "pixel_size": self._current_pixel_size(),
+            "pixel_size_index": self._pixel_size_slider.value(),
             "glow": self._glow_slider.value(),
             "noise": self._noise_slider.value(),
             "sharpen": self._sharpness_slider.value(),
@@ -396,7 +420,10 @@ class MainWindow(QMainWindow):
         set_value(self._period_slider, "period", self._period_slider.setValue)
         set_value(self._slope_slider, "slope", self._slope_slider.setValue)
         set_value(self._rotation_slider, "rotation", self._rotation_slider.setValue)
-        set_value(self._pixel_size_slider, "pixel_size", self._pixel_size_slider.setValue)
+        if "pixel_size" in settings:
+            self._set_pixel_size_from_value(int(settings["pixel_size"]))
+        elif "pixel_size_index" in settings:
+            self._pixel_size_slider.setValue(int(settings["pixel_size_index"]))
         set_value(self._glow_slider, "glow", self._glow_slider.setValue)
         set_value(self._noise_slider, "noise", self._noise_slider.setValue)
         set_value(self._sharpness_slider, "sharpen", self._sharpness_slider.setValue)
@@ -426,8 +453,17 @@ class MainWindow(QMainWindow):
             enabled = name in active
             widget.setEnabled(enabled)
             label = self._parameter_labels.get(name)
+            info = PARAMETER_INFO.get(name)
+            label_override = spec.parameter_labels.get(name)
+            tooltip_override = spec.parameter_tooltips.get(name)
+            tooltip = tooltip_override or (info.tooltip if info else "")
             if label is not None:
                 label.setEnabled(enabled)
+                if info is not None:
+                    label.setText(label_override or info.label)
+                    label.setToolTip(tooltip)
+            if info is not None:
+                widget.setToolTip(tooltip)
         self._queue_update()
 
     def _queue_update(self) -> None:
@@ -440,7 +476,7 @@ class MainWindow(QMainWindow):
             frequency=self._frequency_slider.value(),
             period=self._period_slider.value(),
             slope=self._slope_slider.value() / 100.0,
-            pixel_size=self._pixel_size_slider.value(),
+            pixel_size=self._current_pixel_size(),
             glow_radius=self._glow_slider.value(),
             noise_level=self._noise_slider.value() / 100.0,
             sharpen_amount=self._sharpness_slider.value() / 100.0,
@@ -464,6 +500,34 @@ class MainWindow(QMainWindow):
             rotation=self._rotation_slider.value(),
         )
         self._processor.enqueue(request)
+
+    def _on_pixel_size_changed(self, index: int) -> None:
+        actual = self._current_pixel_size(index)
+        if self._pixel_size_label is not None:
+            self._pixel_size_label.setText(f"Dither Resolution ({actual}px)")
+            self._pixel_size_label.setToolTip(
+                "Down-sample the working image to emulate coarse pixels before halftoning."
+            )
+        self._queue_update()
+
+    def _current_pixel_size(self, index: int | None = None) -> int:
+        if not self._pixel_size_steps:
+            return 1
+        value = self._pixel_size_slider.value() if index is None else index
+        value = max(0, min(value, len(self._pixel_size_steps) - 1))
+        return self._pixel_size_steps[value]
+
+    def _set_pixel_size_from_value(self, value: int) -> None:
+        if not self._pixel_size_steps:
+            return
+        if value in self._pixel_size_steps:
+            index = self._pixel_size_steps.index(value)
+        elif 0 <= value <= self._pixel_size_slider.maximum():
+            index = int(value)
+        else:
+            differences = [abs(step - value) for step in self._pixel_size_steps]
+            index = int(min(range(len(self._pixel_size_steps)), key=lambda i: differences[i]))
+        self._pixel_size_slider.setValue(index)
 
     def _on_palette_changed(self, text: str) -> None:
         custom = text == "Custom Two-Tone"
@@ -490,7 +554,7 @@ class MainWindow(QMainWindow):
             frequency=self._frequency_slider.value(),
             period=self._period_slider.value(),
             slope=self._slope_slider.value() / 100.0,
-            pixel_size=self._pixel_size_slider.value(),
+            pixel_size=self._current_pixel_size(),
             glow_radius=self._glow_slider.value(),
             noise_level=self._noise_slider.value() / 100.0,
             sharpen_amount=self._sharpness_slider.value() / 100.0,

@@ -7,11 +7,11 @@ A monochrome desktop application for exploring over forty dithering and halftone
 - Load any raster image and preview changes in real time thanks to a background processing queue and down-scaled preview renders.
 - Choose from a variety of error-diffusion and modulation algorithms including Floyd–Steinberg, Jarvis–Judice–Ninke, blue-noise clustering, spiral/line/dot screens, glitch strata, and more.
 - Blue-noise clustering and other creative modes have been tuned for stable output without random failures.
-- Adjust threshold plus algorithm-specific parameters (amplitude, frequency, period, slope, rotation) with controls that enable only when the selected shader uses them.
-- Dial in block size with the new pixel-size control to down-sample before dithering for chunkier, faster renders when desired.
+- Adjust threshold plus algorithm-specific parameters with labels that adapt to each algorithm (e.g. error-spread for diffusion, cluster contrast for blue-noise, pattern scale for halftones).
+- Dial in block size with the Dither Resolution control, which now offers finer increments for subtle down-sampling as well as bold pixel-art reductions.
 - Switch between RGB balance, monochrome luma, indexed 4/8 levels, retro 16-bit/8-bit quantisation, neon and CMYK composite modes.
 - Explore a library of vintage palettes (Game Boy, CGA, Commodore 64, ZX Spectrum, CMYK print, vaporwave, etc.) or dial in a custom two-tone map alongside RGB channel scaling (0–200%).
-- Creative tone sculpting with gamma, contrast, saturation, hue shift, edge emphasis, vignette strength, invert, posterise, and original-image blend controls.
+- Creative tone sculpting with gamma, contrast, saturation, hue shift, edge emphasis, vignette strength, invert, posterise, original-image blend controls, plus a highlight-aware glow effect instead of a simple blur.
 - Zoomable preview with Control + mouse wheel and full-resolution rendering on demand.
 - Save and load presets for the entire control stack.
 
