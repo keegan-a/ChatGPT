@@ -5,10 +5,10 @@ A monochrome desktop application for exploring over forty dithering and halftone
 ## Features
 
 - Load any raster image and preview changes in real time thanks to a background processing queue and down-scaled preview renders.
-- Choose from a variety of error-diffusion and modulation algorithms including Floyd–Steinberg, Jarvis–Judice–Ninke, row/column modulation, circuit modulation, tilt modulation, and more.
-- Adjust threshold, amplitude, frequency, period, slope, glow, noise, sharpening, and per-channel colour scaling.
+- Choose from a variety of error-diffusion and modulation algorithms including Floyd–Steinberg, Jarvis–Judice–Ninke, blue-noise clustering, spiral/line/dot screens, glitch strata, and more.
+- Adjust threshold, amplitude, frequency, period, slope, rotation, glow, noise, sharpening, and per-channel colour scaling.
 - Optional two-colour palette mapping plus RGB channel scaling (0–200%) to experiment beyond greyscale.
-- Glow, sharpen, and noise controls for creative treatments.
+- Creative tone sculpting with gamma, contrast, saturation, hue shift, edge emphasis, vignette strength, invert, posterise, and original-image blend controls.
 - Zoomable preview with Control + mouse wheel and full-resolution rendering on demand.
 - Save and load presets for the entire control stack.
 

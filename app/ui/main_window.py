@@ -4,10 +4,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtGui import QAction, QImage, QPixmap
 from PySide6.QtWidgets import (
     QComboBox,
+    QCheckBox,
     QFileDialog,
     QFormLayout,
     QGraphicsPixmapItem,
@@ -70,10 +71,12 @@ class MainWindow(QMainWindow):
         self._view = PreviewView()
         self._view.setScene(self._scene)
 
-        self._processor = ImageProcessor(self._update_preview)
+        self._processor = ImageProcessor()
+        self._processor.processed.connect(self._update_preview)
         self._preset_manager = PresetManager(Path.home() / ".dither_studio" / "presets")
 
         self._source_path: Path | None = None
+        self.statusBar()
         self._setup_ui()
 
     # ------------------------------------------------------------------ UI SETUP
@@ -121,6 +124,7 @@ class MainWindow(QMainWindow):
 
         panel_layout.addWidget(self._build_algorithm_controls())
         panel_layout.addWidget(self._build_effect_controls())
+        panel_layout.addWidget(self._build_tone_controls())
         panel_layout.addWidget(self._build_colour_controls())
         panel_layout.addWidget(self._build_output_controls())
         panel_layout.addStretch(1)
@@ -152,6 +156,9 @@ class MainWindow(QMainWindow):
         self._slope_slider = self._make_slider(-100, 100, 0, self._queue_update)
         layout.addRow("Slope", self._slope_slider)
 
+        self._rotation_slider = self._make_slider(-90, 90, 0, self._queue_update)
+        layout.addRow("Rotation", self._rotation_slider)
+
         return box
 
     # ---------------------------------------------------------------- Effects
@@ -167,6 +174,40 @@ class MainWindow(QMainWindow):
 
         self._sharpness_slider = self._make_slider(0, 100, 50, self._queue_update)
         layout.addRow("Sharpen", self._sharpness_slider)
+
+        return box
+
+    def _build_tone_controls(self) -> QWidget:
+        box = QGroupBox("Tone & FX")
+        layout = QFormLayout(box)
+
+        self._gamma_slider = self._make_slider(10, 300, 100, self._queue_update)
+        layout.addRow("Gamma", self._gamma_slider)
+
+        self._contrast_slider = self._make_slider(0, 200, 100, self._queue_update)
+        layout.addRow("Contrast", self._contrast_slider)
+
+        self._saturation_slider = self._make_slider(0, 200, 100, self._queue_update)
+        layout.addRow("Saturation", self._saturation_slider)
+
+        self._hue_slider = self._make_slider(-180, 180, 0, self._queue_update)
+        layout.addRow("Hue Shift", self._hue_slider)
+
+        self._edge_slider = self._make_slider(0, 100, 0, self._queue_update)
+        layout.addRow("Edge Boost", self._edge_slider)
+
+        self._posterize_slider = self._make_slider(0, 8, 0, self._queue_update)
+        layout.addRow("Posterize Levels", self._posterize_slider)
+
+        self._blend_slider = self._make_slider(0, 100, 0, self._queue_update)
+        layout.addRow("Blend Original", self._blend_slider)
+
+        self._vignette_slider = self._make_slider(0, 100, 0, self._queue_update)
+        layout.addRow("Vignette", self._vignette_slider)
+
+        self._invert_toggle = QCheckBox("Invert Output")
+        self._invert_toggle.stateChanged.connect(self._queue_update)
+        layout.addRow(self._invert_toggle)
 
         return box
 
@@ -295,6 +336,7 @@ class MainWindow(QMainWindow):
             "frequency": self._frequency_slider.value(),
             "period": self._period_slider.value(),
             "slope": self._slope_slider.value(),
+            "rotation": self._rotation_slider.value(),
             "glow": self._glow_slider.value(),
             "noise": self._noise_slider.value(),
             "sharpen": self._sharpness_slider.value(),
@@ -304,6 +346,15 @@ class MainWindow(QMainWindow):
             "two_colour_mode": self._two_color_toggle.currentText(),
             "colour_a": self._color_a_input.text(),
             "colour_b": self._color_b_input.text(),
+            "gamma": self._gamma_slider.value(),
+            "contrast": self._contrast_slider.value(),
+            "saturation": self._saturation_slider.value(),
+            "hue": self._hue_slider.value(),
+            "edge": self._edge_slider.value(),
+            "posterize": self._posterize_slider.value(),
+            "blend": self._blend_slider.value(),
+            "invert": self._invert_toggle.isChecked(),
+            "vignette": self._vignette_slider.value(),
         }
 
     def _apply_settings(self, settings: dict) -> None:
@@ -317,6 +368,7 @@ class MainWindow(QMainWindow):
         set_value(self._frequency_slider, "frequency", self._frequency_slider.setValue)
         set_value(self._period_slider, "period", self._period_slider.setValue)
         set_value(self._slope_slider, "slope", self._slope_slider.setValue)
+        set_value(self._rotation_slider, "rotation", self._rotation_slider.setValue)
         set_value(self._glow_slider, "glow", self._glow_slider.setValue)
         set_value(self._noise_slider, "noise", self._noise_slider.setValue)
         set_value(self._sharpness_slider, "sharpen", self._sharpness_slider.setValue)
@@ -326,6 +378,15 @@ class MainWindow(QMainWindow):
         set_value(self._two_color_toggle, "two_colour_mode", self._two_color_toggle.setCurrentText)
         set_value(self._color_a_input, "colour_a", self._color_a_input.setText)
         set_value(self._color_b_input, "colour_b", self._color_b_input.setText)
+        set_value(self._gamma_slider, "gamma", self._gamma_slider.setValue)
+        set_value(self._contrast_slider, "contrast", self._contrast_slider.setValue)
+        set_value(self._saturation_slider, "saturation", self._saturation_slider.setValue)
+        set_value(self._hue_slider, "hue", self._hue_slider.setValue)
+        set_value(self._edge_slider, "edge", self._edge_slider.setValue)
+        set_value(self._posterize_slider, "posterize", self._posterize_slider.setValue)
+        set_value(self._blend_slider, "blend", self._blend_slider.setValue)
+        set_value(self._invert_toggle, "invert", self._invert_toggle.setChecked)
+        set_value(self._vignette_slider, "vignette", self._vignette_slider.setValue)
 
     def _queue_update(self) -> None:
         if not self._processor.has_image:
@@ -347,9 +408,20 @@ class MainWindow(QMainWindow):
             colour_a=self._color_a_input.text(),
             colour_b=self._color_b_input.text(),
             full_resolution=False,
+            gamma=self._gamma_slider.value() / 100.0,
+            contrast=self._contrast_slider.value() / 100.0,
+            saturation=self._saturation_slider.value() / 100.0,
+            hue_shift=self._hue_slider.value(),
+            edge_boost=self._edge_slider.value() / 100.0,
+            posterize_levels=self._posterize_slider.value(),
+            blend_original=self._blend_slider.value() / 100.0,
+            invert_output=self._invert_toggle.isChecked(),
+            vignette_strength=self._vignette_slider.value() / 100.0,
+            rotation=self._rotation_slider.value(),
         )
         self._processor.enqueue(request)
 
+    @Slot(QImage, bool)
     def _update_preview(self, image: QImage, full_resolution: bool) -> None:
         pixmap = QPixmap.fromImage(image)
         self._preview_item.setPixmap(pixmap)
@@ -378,6 +450,16 @@ class MainWindow(QMainWindow):
             colour_a=self._color_a_input.text(),
             colour_b=self._color_b_input.text(),
             full_resolution=True,
+            gamma=self._gamma_slider.value() / 100.0,
+            contrast=self._contrast_slider.value() / 100.0,
+            saturation=self._saturation_slider.value() / 100.0,
+            hue_shift=self._hue_slider.value(),
+            edge_boost=self._edge_slider.value() / 100.0,
+            posterize_levels=self._posterize_slider.value(),
+            blend_original=self._blend_slider.value() / 100.0,
+            invert_output=self._invert_toggle.isChecked(),
+            vignette_strength=self._vignette_slider.value() / 100.0,
+            rotation=self._rotation_slider.value(),
         )
         self._processor.enqueue(request)
 

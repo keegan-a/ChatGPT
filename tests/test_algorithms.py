@@ -1,4 +1,9 @@
 """Lightweight tests for the dithering algorithm registry."""
+
+import pytest
+
+pytest.importorskip("numpy")
+
 from app.core.dithering import DITHER_ALGORITHMS
 
 
@@ -15,5 +20,13 @@ def test_expected_algorithms_present():
         "Circuit Modulation",
         "Tilt Modulation",
         "Pattern Matrix",
+        "Random Threshold",
+        "Blue Noise Cluster",
+        "Dot Screen",
+        "Line Screen",
+        "Radial Rings",
+        "Spiral Waves",
+        "Diamond Mesh",
+        "Glitch Strata",
     }
     assert expected.issubset(DITHER_ALGORITHMS.keys())

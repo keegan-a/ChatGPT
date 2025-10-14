@@ -104,6 +104,89 @@ def pattern_matrix(image: np.ndarray, request: ProcessingRequest) -> np.ndarray:
     return _threshold(modulated, request.threshold)
 
 
+def random_threshold(image: np.ndarray, request: ProcessingRequest) -> np.ndarray:
+    rng = np.random.default_rng()
+    jitter = rng.uniform(-request.amplitude * 255, request.amplitude * 255, size=image.shape)
+    modulated = image + jitter
+    return _threshold(modulated, request.threshold)
+
+
+def blue_noise_cluster(image: np.ndarray, request: ProcessingRequest) -> np.ndarray:
+    rng = np.random.default_rng()
+    base = rng.normal(0.0, 1.0, size=image.shape[:2])
+    for _ in range(max(1, request.period // 2)):
+        base = (
+            base
+            + np.roll(base, 1, axis=0)
+            + np.roll(base, -1, axis=0)
+            + np.roll(base, 1, axis=1)
+            + np.roll(base, -1, axis=1)
+        ) / 5.0
+    base = (base - base.min()) / (base.ptp() + 1e-5)
+    pattern = (base - 0.5) * 2.0
+    modulated = image + request.amplitude * pattern[..., None] * 255
+    return _threshold(modulated, request.threshold)
+
+
+def dot_screen(image: np.ndarray, request: ProcessingRequest) -> np.ndarray:
+    xr, yr = _rotated_coordinates(image.shape[:2], request.rotation)
+    period = max(request.period, 1)
+    pattern = np.sin(xr / period * np.pi) * np.sin(yr / period * np.pi)
+    modulated = image + request.amplitude * pattern[..., None] * 255
+    return _threshold(modulated, request.threshold)
+
+
+def line_screen(image: np.ndarray, request: ProcessingRequest) -> np.ndarray:
+    xr, _ = _rotated_coordinates(image.shape[:2], request.rotation)
+    period = max(request.period, 1)
+    pattern = np.sin(xr / period * np.pi * max(request.frequency, 1))
+    modulated = image + request.amplitude * pattern[..., None] * 255
+    return _threshold(modulated, request.threshold)
+
+
+def radial_rings(image: np.ndarray, request: ProcessingRequest) -> np.ndarray:
+    height, width = image.shape[:2]
+    y, x = np.indices((height, width))
+    cx = width / 2.0
+    cy = height / 2.0
+    radius = np.sqrt((x - cx) ** 2 + (y - cy) ** 2)
+    pattern = np.sin(radius / max(request.period, 1) * max(request.frequency, 1))
+    modulated = image + request.amplitude * pattern[..., None] * 255
+    return _threshold(modulated, request.threshold)
+
+
+def spiral_waves(image: np.ndarray, request: ProcessingRequest) -> np.ndarray:
+    height, width = image.shape[:2]
+    y, x = np.indices((height, width))
+    cx = width / 2.0
+    cy = height / 2.0
+    angle = np.arctan2(y - cy, x - cx)
+    radius = np.sqrt((x - cx) ** 2 + (y - cy) ** 2)
+    pattern = np.sin(radius * max(request.frequency, 1) / max(request.period, 1) + angle * request.slope)
+    modulated = image + request.amplitude * pattern[..., None] * 255
+    return _threshold(modulated, request.threshold)
+
+
+def diamond_mesh(image: np.ndarray, request: ProcessingRequest) -> np.ndarray:
+    xr, yr = _rotated_coordinates(image.shape[:2], request.rotation)
+    period = max(request.period, 1)
+    pattern = (np.abs(xr % period - period / 2) + np.abs(yr % period - period / 2))
+    pattern = (pattern / (period / 2)) - 1.0
+    modulated = image + request.amplitude * pattern[..., None] * 255
+    return _threshold(modulated, request.threshold)
+
+
+def glitch_strata(image: np.ndarray, request: ProcessingRequest) -> np.ndarray:
+    stripes = np.sin(np.linspace(0, np.pi * max(request.frequency, 1), image.shape[0]))
+    offsets = (np.sign(stripes) * max(request.period, 1)).astype(int)
+    jitter = np.empty_like(image)
+    for row_idx, shift in enumerate(offsets):
+        jitter[row_idx] = np.roll(image[row_idx], shift, axis=0)
+    strength = np.clip(request.amplitude, 0.0, 1.0)
+    modulated = image * (1 - strength) + jitter * strength
+    return _threshold(modulated, request.threshold)
+
+
 # ----------------------------------------------------------------- Shared helpers
 
 def _error_diffusion(image: np.ndarray, request: ProcessingRequest, diffusion_matrix: dict[tuple[int, int], float]) -> np.ndarray:
@@ -138,4 +221,21 @@ DITHER_ALGORITHMS: Dict[str, Callable[[np.ndarray, ProcessingRequest], np.ndarra
     "Circuit Modulation": circuit_modulation,
     "Tilt Modulation": tilt_modulation,
     "Pattern Matrix": pattern_matrix,
+    "Random Threshold": random_threshold,
+    "Blue Noise Cluster": blue_noise_cluster,
+    "Dot Screen": dot_screen,
+    "Line Screen": line_screen,
+    "Radial Rings": radial_rings,
+    "Spiral Waves": spiral_waves,
+    "Diamond Mesh": diamond_mesh,
+    "Glitch Strata": glitch_strata,
 }
+
+
+def _rotated_coordinates(shape: tuple[int, int], rotation: float) -> tuple[np.ndarray, np.ndarray]:
+    angle = np.deg2rad(rotation)
+    height, width = shape
+    y, x = np.indices((height, width))
+    xr = x * np.cos(angle) - y * np.sin(angle)
+    yr = x * np.sin(angle) + y * np.cos(angle)
+    return xr, yr

@@ -22,3 +22,13 @@ class ProcessingRequest:
     colour_a: str
     colour_b: str
     full_resolution: bool
+    gamma: float
+    contrast: float
+    saturation: float
+    hue_shift: float
+    edge_boost: float
+    posterize_levels: int
+    blend_original: float
+    invert_output: bool
+    vignette_strength: float
+    rotation: float
