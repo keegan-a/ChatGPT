@@ -28,5 +28,10 @@ def test_expected_algorithms_present():
         "Spiral Waves",
         "Diamond Mesh",
         "Glitch Strata",
+        "Horizontal Stitch",
+        "Vertical Stitch",
+        "Offset Grid",
+        "Cross Hatch",
+        "Iso Weave",
     }
     assert expected.issubset(DITHER_ALGORITHMS.keys())

@@ -21,6 +21,9 @@ class ProcessingRequest:
     two_colour_mode: str
     colour_a: str
     colour_b: str
+    colour_render_mode: str
+    palette_mix: float
+    bit_depth: int
     full_resolution: bool
     gamma: float
     contrast: float

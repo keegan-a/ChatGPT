@@ -5,9 +5,10 @@ A monochrome desktop application for exploring over forty dithering and halftone
 ## Features
 
 - Load any raster image and preview changes in real time thanks to a background processing queue and down-scaled preview renders.
-- Choose from a variety of error-diffusion and modulation algorithms including Floyd–Steinberg, Jarvis–Judice–Ninke, blue-noise clustering, spiral/line/dot screens, glitch strata, and more.
+- Choose from a variety of error-diffusion and modulation algorithms including Floyd–Steinberg, Jarvis–Judice–Ninke, blue-noise clustering, stitch/grid weaves, spiral/line/dot screens, glitch strata, and more.
 - Adjust threshold, amplitude, frequency, period, slope, rotation, glow, noise, sharpening, and per-channel colour scaling.
 - Optional two-colour palette mapping plus RGB channel scaling (0–200%) to experiment beyond greyscale.
+- Retro-inspired colour render modes spanning indexed 16/32/64/256 palettes, Game Boy, CGA/EGA, Commodore 64, Amiga, CMYK print simulations, neon vector glows, thermal printers, and more with adjustable palette blending and bit depth.
 - Creative tone sculpting with gamma, contrast, saturation, hue shift, edge emphasis, vignette strength, invert, posterise, and original-image blend controls.
 - Zoomable preview with Control + mouse wheel and full-resolution rendering on demand.
 - Save and load presets for the entire control stack.
@@ -56,8 +57,8 @@ Once the window opens you can load an image with the toolbar button and start ex
 ## Performance notes
 
 - Real-time previews are rendered against a down-scaled copy of the original image while full-resolution renders are dispatched on demand.
-- All heavy lifting is handled with NumPy arrays for vectorised operations.
-- The processing pipeline runs on a small thread pool so the UI remains responsive, even for large source images.
+- All heavy lifting is handled with NumPy arrays for vectorised operations, with optional Numba-accelerated error diffusion for massive speed gains when `numba` is installed.
+- The processing pipeline runs on a small thread pool so the UI remains responsive, even for large source images. Preview requests are coalesced so only the newest slider change is rendered.
 
 ## Presets
 

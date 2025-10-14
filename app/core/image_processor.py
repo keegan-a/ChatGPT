@@ -10,6 +10,7 @@ from PIL import Image, ImageEnhance, ImageFilter
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QImage
 
+from app.core.colour_modes import apply_render_mode
 from app.core.dithering import DITHER_ALGORITHMS
 from app.core.models import ProcessingRequest
 from app.core.utils import convert_qimage
@@ -28,6 +29,7 @@ class ImageProcessor(QObject):
         self._source_image: Image.Image | None = None
         self._preview_cache: QImage | None = None
         self._full_res_cache: QImage | None = None
+        self._sequence: int = 0
 
     # ------------------------------------------------------------------ Properties
     @property
@@ -55,13 +57,28 @@ class ImageProcessor(QObject):
         if not self._source_image:
             return
 
+        emit_cached: QImage | None = None
+        sequence = self._sequence
         with self._request_lock:
-            self._latest_request = request
+            if (
+                not request.full_resolution
+                and self._latest_request == request
+                and self._preview_cache is not None
+            ):
+                emit_cached = self._preview_cache
+            else:
+                self._latest_request = request
+                self._sequence += 1
+                sequence = self._sequence
 
-        self._executor.submit(self._process_request, request)
+        if emit_cached is not None:
+            self.processed.emit(emit_cached, False)
+            return
+
+        self._executor.submit(self._process_request, request, sequence)
 
     # ---------------------------------------------------------------- Processing
-    def _process_request(self, request: ProcessingRequest) -> None:
+    def _process_request(self, request: ProcessingRequest, sequence: int) -> None:
         if not self._source_image:
             return
 
@@ -75,6 +92,10 @@ class ImageProcessor(QObject):
                 self.processed.emit(self._full_res_cache, True)
                 return
 
+        with self._request_lock:
+            if not request.full_resolution and sequence != self._sequence:
+                return
+
         processed = self._apply_pipeline(image, request)
 
         qimage = convert_qimage(processed)
@@ -83,6 +104,10 @@ class ImageProcessor(QObject):
         else:
             self._preview_cache = qimage
 
+        with self._request_lock:
+            if not request.full_resolution and sequence != self._sequence:
+                return
+
         self.processed.emit(qimage, request.full_resolution)
 
     # ----------------------------------------------------------------- Pipeline
@@ -90,6 +115,7 @@ class ImageProcessor(QObject):
         base = np.asarray(image.convert("RGB"), dtype=np.float32)
         working = base.copy()
         working = self._apply_colour_controls(working, request)
+        working = apply_render_mode(working, request.colour_render_mode, request.palette_mix, request.bit_depth)
         working = self._apply_tone_controls(working, request)
         toned_reference = working.copy()
         working = self._apply_noise(working, request.noise_level)

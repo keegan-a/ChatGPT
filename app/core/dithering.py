@@ -5,6 +5,7 @@ from typing import Callable, Dict
 
 import numpy as np
 
+from app.core.accelerators import error_diffusion_accelerated
 from app.core.models import ProcessingRequest
 
 
@@ -187,21 +188,86 @@ def glitch_strata(image: np.ndarray, request: ProcessingRequest) -> np.ndarray:
     return _threshold(modulated, request.threshold)
 
 
+def horizontal_stitch(image: np.ndarray, request: ProcessingRequest) -> np.ndarray:
+    height = image.shape[0]
+    y = np.arange(height, dtype=np.float32)[:, None]
+    period = max(request.period, 1)
+    stitch = np.cos((y / period) * np.pi * max(request.frequency, 1))
+    texture = (np.sign(np.sin(y / period * np.pi)) * 0.5 + 0.5)
+    pattern = (stitch * texture) * 255
+    modulated = image + request.amplitude * pattern[..., None]
+    return _threshold(modulated, request.threshold)
+
+
+def vertical_stitch(image: np.ndarray, request: ProcessingRequest) -> np.ndarray:
+    width = image.shape[1]
+    x = np.arange(width, dtype=np.float32)[None, :]
+    period = max(request.period, 1)
+    stitch = np.cos((x / period) * np.pi * max(request.frequency, 1))
+    texture = (np.sign(np.sin(x / period * np.pi)) * 0.5 + 0.5)
+    pattern = (stitch * texture) * 255
+    modulated = image + request.amplitude * pattern[..., None]
+    return _threshold(modulated, request.threshold)
+
+
+def offset_grid(image: np.ndarray, request: ProcessingRequest) -> np.ndarray:
+    period = max(request.period, 1)
+    y, x = np.indices(image.shape[:2], dtype=np.int32)
+    offsets = ((y // period) % 2) * (period // 2)
+    pattern = ((x + offsets) % max(period, 1)) / period
+    modulated = image + (pattern[..., None] - 0.5) * request.amplitude * 255
+    return _threshold(modulated, request.threshold)
+
+
+def cross_hatch(image: np.ndarray, request: ProcessingRequest) -> np.ndarray:
+    xr, yr = _rotated_coordinates(image.shape[:2], request.rotation)
+    period = max(request.period, 1)
+    frequency = max(request.frequency, 1)
+    hatch = (
+        np.sin(xr / period * np.pi * frequency)
+        + np.sin(yr / period * np.pi * frequency)
+        + np.sin((xr + yr) / (period * 0.5) * np.pi)
+    ) / 3.0
+    modulated = image + hatch[..., None] * request.amplitude * 255
+    return _threshold(modulated, request.threshold)
+
+
+def iso_weave(image: np.ndarray, request: ProcessingRequest) -> np.ndarray:
+    xr, yr = _rotated_coordinates(image.shape[:2], request.rotation)
+    period = max(request.period, 1)
+    weave = np.sin((xr + yr) / period * np.pi) * np.sin((xr - yr) / period * np.pi)
+    depth = np.sin(yr / period * np.pi * max(request.frequency, 1))
+    pattern = (weave + depth * request.slope) * 255
+    modulated = image + request.amplitude * pattern[..., None]
+    return _threshold(modulated, request.threshold)
+
+
 # ----------------------------------------------------------------- Shared helpers
 
-def _error_diffusion(image: np.ndarray, request: ProcessingRequest, diffusion_matrix: dict[tuple[int, int], float]) -> np.ndarray:
+def _error_diffusion(
+    image: np.ndarray,
+    request: ProcessingRequest,
+    diffusion_matrix: dict[tuple[int, int], float],
+) -> np.ndarray:
+    offsets = np.array(list(diffusion_matrix.keys()), dtype=np.int32)
+    weights = np.array(list(diffusion_matrix.values()), dtype=np.float32)
+    accelerated = error_diffusion_accelerated(image, float(request.threshold), offsets, weights)
+    if accelerated is not None:
+        return accelerated
+
     height, width, channels = image.shape
     buffer = image.copy()
     for y in range(height):
         for x in range(width):
-            old_pixel = buffer[y, x].copy()
+            old_pixel = buffer[y, x]
             new_pixel = np.where(old_pixel > request.threshold, 255.0, 0.0)
             buffer[y, x] = new_pixel
             error = old_pixel - new_pixel
-            for (dx, dy), weight in diffusion_matrix.items():
-                nx, ny = x + dx, y + dy
+            for idx in range(offsets.shape[0]):
+                nx = x + offsets[idx, 0]
+                ny = y + offsets[idx, 1]
                 if 0 <= nx < width and 0 <= ny < height:
-                    buffer[ny, nx] += error * weight
+                    buffer[ny, nx] += error * weights[idx]
     return np.clip(buffer, 0, 255)
 
 
@@ -229,6 +295,11 @@ DITHER_ALGORITHMS: Dict[str, Callable[[np.ndarray, ProcessingRequest], np.ndarra
     "Spiral Waves": spiral_waves,
     "Diamond Mesh": diamond_mesh,
     "Glitch Strata": glitch_strata,
+    "Horizontal Stitch": horizontal_stitch,
+    "Vertical Stitch": vertical_stitch,
+    "Offset Grid": offset_grid,
+    "Cross Hatch": cross_hatch,
+    "Iso Weave": iso_weave,
 }
 
 

@@ -4,6 +4,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable
 
+import math
+
 from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtGui import QAction, QImage, QPixmap
 from PySide6.QtWidgets import (
@@ -28,6 +30,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from app.core.colour_modes import RENDER_MODE_OPTIONS
 from app.core.image_processor import ImageProcessor
 from app.core.models import ProcessingRequest
 from app.core.presets import PresetManager
@@ -229,6 +232,17 @@ class MainWindow(QMainWindow):
         self._two_color_toggle.currentTextChanged.connect(self._queue_update)
         layout.addRow("Palette", self._two_color_toggle)
 
+        self._render_mode_combo = QComboBox()
+        self._render_mode_combo.addItems(RENDER_MODE_OPTIONS)
+        self._render_mode_combo.currentTextChanged.connect(self._on_render_mode_changed)
+        layout.addRow("Colour Render", self._render_mode_combo)
+
+        self._bit_depth_slider = self._make_slider(1, 8, 6, self._queue_update)
+        layout.addRow("Channel Depth", self._bit_depth_slider)
+
+        self._palette_mix_slider = self._make_slider(0, 100, 60, self._queue_update)
+        layout.addRow("Palette Mix", self._palette_mix_slider)
+
         two_color_layout = QHBoxLayout()
         self._color_a_input = QLineEdit("#000000")
         self._color_b_input = QLineEdit("#FFFFFF")
@@ -346,6 +360,9 @@ class MainWindow(QMainWindow):
             "two_colour_mode": self._two_color_toggle.currentText(),
             "colour_a": self._color_a_input.text(),
             "colour_b": self._color_b_input.text(),
+            "colour_render_mode": self._render_mode_combo.currentText(),
+            "palette_mix": self._palette_mix_slider.value(),
+            "bit_depth": self._bit_depth_slider.value(),
             "gamma": self._gamma_slider.value(),
             "contrast": self._contrast_slider.value(),
             "saturation": self._saturation_slider.value(),
@@ -378,6 +395,9 @@ class MainWindow(QMainWindow):
         set_value(self._two_color_toggle, "two_colour_mode", self._two_color_toggle.setCurrentText)
         set_value(self._color_a_input, "colour_a", self._color_a_input.setText)
         set_value(self._color_b_input, "colour_b", self._color_b_input.setText)
+        set_value(self._render_mode_combo, "colour_render_mode", self._render_mode_combo.setCurrentText)
+        set_value(self._palette_mix_slider, "palette_mix", self._palette_mix_slider.setValue)
+        set_value(self._bit_depth_slider, "bit_depth", self._bit_depth_slider.setValue)
         set_value(self._gamma_slider, "gamma", self._gamma_slider.setValue)
         set_value(self._contrast_slider, "contrast", self._contrast_slider.setValue)
         set_value(self._saturation_slider, "saturation", self._saturation_slider.setValue)
@@ -407,6 +427,9 @@ class MainWindow(QMainWindow):
             two_colour_mode=self._two_color_toggle.currentText(),
             colour_a=self._color_a_input.text(),
             colour_b=self._color_b_input.text(),
+            colour_render_mode=self._render_mode_combo.currentText(),
+            palette_mix=self._palette_mix_slider.value() / 100.0,
+            bit_depth=self._bit_depth_slider.value(),
             full_resolution=False,
             gamma=self._gamma_slider.value() / 100.0,
             contrast=self._contrast_slider.value() / 100.0,
@@ -449,6 +472,9 @@ class MainWindow(QMainWindow):
             two_colour_mode=self._two_color_toggle.currentText(),
             colour_a=self._color_a_input.text(),
             colour_b=self._color_b_input.text(),
+            colour_render_mode=self._render_mode_combo.currentText(),
+            palette_mix=self._palette_mix_slider.value() / 100.0,
+            bit_depth=self._bit_depth_slider.value(),
             full_resolution=True,
             gamma=self._gamma_slider.value() / 100.0,
             contrast=self._contrast_slider.value() / 100.0,
@@ -465,6 +491,23 @@ class MainWindow(QMainWindow):
 
     def _on_zoom_changed(self, zoom: float) -> None:
         self._zoom_label.setText(f"Zoom: {int(zoom * 100)}%")
+
+    def _on_render_mode_changed(self, mode: str) -> None:
+        levels = self._indexed_levels_from_label(mode)
+        if levels:
+            depth = max(1, min(8, math.ceil(math.log2(levels))))
+            if self._bit_depth_slider.value() != depth:
+                self._bit_depth_slider.blockSignals(True)
+                self._bit_depth_slider.setValue(depth)
+                self._bit_depth_slider.blockSignals(False)
+        self._queue_update()
+
+    @staticmethod
+    def _indexed_levels_from_label(label: str) -> int | None:
+        tokens = [token for token in label.split() if token.isdigit()]
+        if tokens:
+            return int(tokens[0])
+        return None
 
     # ----------------------------------------------------------------- Properties
     @property
