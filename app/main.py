@@ -26,55 +26,38 @@ def main() -> int:
                 return role
         return getattr(QPalette, name, None)
 
-    def install_aliases() -> None:
-        """Patch palette instances so legacy attributes resolve safely.
-
-        Some PySide6 wheels expose the classic ``QPalette.Window`` constants,
-        some only expose the enum-style ``QPalette.ColorRole.Window`` values,
-        and a few ship neither but still leave compiled bytecode around that
-        references ``palette.Window``. We add aliases on both the class and the
-        instance to ensure any import order still succeeds.
-        """
-
-        for role_name in (
-            "Window",
-            "WindowText",
-            "Base",
-            "AlternateBase",
-            "ToolTipBase",
-            "ToolTipText",
-            "Text",
-            "Button",
-            "ButtonText",
-            "BrightText",
-        ):
-            role = resolve_role(role_name)
-            if role is None:
-                continue
-            if not hasattr(QPalette, role_name):
-                setattr(QPalette, role_name, role)
-            if not hasattr(palette, role_name):
-                setattr(palette, role_name, role)
-
-    install_aliases()
-
     def adjust(role_name: str, factor: int, lighten: bool = False) -> None:
         role = resolve_role(role_name)
         if role is None:
             return
-        base = palette.color(role)
-        palette.setColor(role, base.lighter(factor) if lighten else base.darker(factor))
 
-    adjust("Window", 160)
-    adjust("WindowText", 180, lighten=True)
-    adjust("Base", 180)
-    adjust("AlternateBase", 160)
-    adjust("ToolTipBase", 180, lighten=True)
-    adjust("ToolTipText", 180, lighten=True)
-    adjust("Text", 200, lighten=True)
-    adjust("Button", 180)
-    adjust("ButtonText", 180, lighten=True)
-    adjust("BrightText", 200, lighten=True)
+        try:
+            base = palette.color(role)
+        except AttributeError:
+            # Some Qt builds can resolve the role constant but still refuse to
+            # accept it when querying colours; skip in that case so launching
+            # never fails.
+            return
+
+        new_color = base.lighter(factor) if lighten else base.darker(factor)
+        palette.setColor(role, new_color)
+
+    # The palette roles that need tweaks to achieve the monochrome aesthetic.
+    adjustments: dict[str, tuple[int, bool]] = {
+        "Window": (160, False),
+        "WindowText": (180, True),
+        "Base": (180, False),
+        "AlternateBase": (160, False),
+        "ToolTipBase": (180, True),
+        "ToolTipText": (180, True),
+        "Text": (200, True),
+        "Button": (180, False),
+        "ButtonText": (180, True),
+        "BrightText": (200, True),
+    }
+
+    for role_name, (factor, lighten) in adjustments.items():
+        adjust(role_name, factor, lighten)
 
     app.setPalette(palette)
 
