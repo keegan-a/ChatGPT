@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 import sys
-from pathlib import Path
-
 from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import QApplication
 
@@ -17,16 +15,41 @@ def main() -> int:
 
     # Apply a monochrome palette to match the design direction.
     palette = app.palette()
-    palette.setColor(QPalette.ColorRole.Window, palette.color(QPalette.ColorRole.Window).darker(160))
-    palette.setColor(QPalette.ColorRole.WindowText, palette.color(QPalette.ColorRole.WindowText).lighter(180))
-    palette.setColor(QPalette.ColorRole.Base, palette.color(QPalette.ColorRole.Base).darker(180))
-    palette.setColor(QPalette.ColorRole.AlternateBase, palette.color(QPalette.ColorRole.AlternateBase).darker(160))
-    palette.setColor(QPalette.ColorRole.ToolTipBase, palette.color(QPalette.ColorRole.ToolTipBase).lighter(180))
-    palette.setColor(QPalette.ColorRole.ToolTipText, palette.color(QPalette.ColorRole.ToolTipText).lighter(180))
-    palette.setColor(QPalette.ColorRole.Text, palette.color(QPalette.ColorRole.Text).lighter(200))
-    palette.setColor(QPalette.ColorRole.Button, palette.color(QPalette.ColorRole.Button).darker(180))
-    palette.setColor(QPalette.ColorRole.ButtonText, palette.color(QPalette.ColorRole.ButtonText).lighter(180))
-    palette.setColor(QPalette.ColorRole.BrightText, palette.color(QPalette.ColorRole.BrightText).lighter(200))
+
+    def resolve_role(name: str) -> QPalette.ColorRole | int | None:
+        """Return a palette role value that is compatible with the Qt build.
+
+        PySide6 renamed the classic ``QPalette.Window`` style attributes to the
+        ``QPalette.ColorRole`` enum. Some Linux and Windows wheels still expose
+        only one naming scheme, so we try both and gracefully skip when neither
+        is available.
+        """
+
+        color_role_enum = getattr(QPalette, "ColorRole", None)
+        if color_role_enum is not None:
+            role = getattr(color_role_enum, name, None)
+            if role is not None:
+                return role
+        return getattr(QPalette, name, None)
+
+    def adjust(role_name: str, factor: int, lighten: bool = False) -> None:
+        role = resolve_role(role_name)
+        if role is None:
+            return
+        base = palette.color(role)
+        palette.setColor(role, base.lighter(factor) if lighten else base.darker(factor))
+
+    adjust("Window", 160)
+    adjust("WindowText", 180, lighten=True)
+    adjust("Base", 180)
+    adjust("AlternateBase", 160)
+    adjust("ToolTipBase", 180, lighten=True)
+    adjust("ToolTipText", 180, lighten=True)
+    adjust("Text", 200, lighten=True)
+    adjust("Button", 180)
+    adjust("ButtonText", 180, lighten=True)
+    adjust("BrightText", 200, lighten=True)
+
     app.setPalette(palette)
 
     # Ensure fonts stay crisp.
