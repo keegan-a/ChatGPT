@@ -17,13 +17,7 @@ def main() -> int:
     palette = app.palette()
 
     def resolve_role(name: str) -> QPalette.ColorRole | int | None:
-        """Return a palette role value that is compatible with the Qt build.
-
-        PySide6 renamed the classic ``QPalette.Window`` style attributes to the
-        ``QPalette.ColorRole`` enum. Some Linux and Windows wheels still expose
-        only one naming scheme, so we try both and gracefully skip when neither
-        is available.
-        """
+        """Return a palette role value that is compatible with the Qt build."""
 
         color_role_enum = getattr(QPalette, "ColorRole", None)
         if color_role_enum is not None:
@@ -31,6 +25,38 @@ def main() -> int:
             if role is not None:
                 return role
         return getattr(QPalette, name, None)
+
+    def install_aliases() -> None:
+        """Patch palette instances so legacy attributes resolve safely.
+
+        Some PySide6 wheels expose the classic ``QPalette.Window`` constants,
+        some only expose the enum-style ``QPalette.ColorRole.Window`` values,
+        and a few ship neither but still leave compiled bytecode around that
+        references ``palette.Window``. We add aliases on both the class and the
+        instance to ensure any import order still succeeds.
+        """
+
+        for role_name in (
+            "Window",
+            "WindowText",
+            "Base",
+            "AlternateBase",
+            "ToolTipBase",
+            "ToolTipText",
+            "Text",
+            "Button",
+            "ButtonText",
+            "BrightText",
+        ):
+            role = resolve_role(role_name)
+            if role is None:
+                continue
+            if not hasattr(QPalette, role_name):
+                setattr(QPalette, role_name, role)
+            if not hasattr(palette, role_name):
+                setattr(palette, role_name, role)
+
+    install_aliases()
 
     def adjust(role_name: str, factor: int, lighten: bool = False) -> None:
         role = resolve_role(role_name)
