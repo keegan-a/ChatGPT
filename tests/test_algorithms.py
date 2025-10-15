@@ -1,63 +1,82 @@
-"""Lightweight tests for the dithering algorithm registry."""
+"""Regression tests for the dithering engine."""
+from __future__ import annotations
+
+from pathlib import Path
 
 import pytest
 
-pytest.importorskip("numpy")
+np = pytest.importorskip("numpy")
+from PIL import Image
 
-from app.core.dithering import DITHER_ALGORITHMS, algorithm_spec
-from app.core.image_processor import ImageProcessor
-
-
-def test_expected_algorithms_present():
-    expected = {
-        "Floyd-Steinberg",
-        "Jarvis-Judice-Ninke",
-        "Sierra",
-        "Row Modulation",
-        "Column Modulation",
-        "Dispersed Modulation",
-        "Medium Modulation",
-        "Heavy Modulation",
-        "Circuit Modulation",
-        "Tilt Modulation",
-        "Pattern Matrix",
-        "Random Threshold",
-        "Blue Noise Cluster",
-        "Dot Screen",
-        "Line Screen",
-        "Radial Rings",
-        "Spiral Waves",
-        "Diamond Mesh",
-        "Glitch Strata",
-    }
-    assert expected.issubset(DITHER_ALGORITHMS.keys())
+from app.core.dithering import DITHER_ALGORITHMS
+from app.core.image_processor import DitheringSettings, ImageProcessor
 
 
-def test_colour_modes_and_palettes_exposed():
+REQUIRED_ALGORITHMS = {
+    "Floyd-Steinberg",
+    "Jarvis-Judice-Ninke",
+    "Stucki",
+    "Atkinson",
+    "Burkes",
+    "Sierra (2-row)",
+    "Sierra Lite (2-4A)",
+    "Bayer 2x2",
+    "Bayer 4x4",
+    "Bayer 8x8",
+    "Clustered Dot (ordered)",
+    "Random",
+}
+
+
+def test_required_algorithms_present() -> None:
+    assert REQUIRED_ALGORITHMS.issubset(DITHER_ALGORITHMS.keys())
+
+
+def test_processor_preview_generates_palette(tmp_path: Path) -> None:
+    image = Image.new("RGB", (32, 32), color=(120, 90, 200))
     processor = ImageProcessor()
-    colour_modes = set(processor.available_colour_modes)
-    required_modes = {
-        "RGB Balance",
-        "Mono Luma",
-        "Indexed 4",
-        "Indexed 8",
-        "Retro 16-bit RGB",
-        "Retro 8-bit RGB",
-        "Hi-Fi Neon",
-        "CMYK Composite",
-    }
-    assert required_modes.issubset(colour_modes)
+    processor.set_image(image)
 
-    palettes = processor.available_palettes
-    assert len(palettes) >= len(DITHER_ALGORITHMS)
-    assert {"Disabled", "Custom Two-Tone", "Game Boy DMG", "CGA 16-Color"}.issubset(set(palettes))
+    settings = DitheringSettings(algorithm="Floyd-Steinberg", color_count=4)
+    result = processor.render_preview(settings, max_size=None)
+    assert result.image.mode in {"RGB", "RGBA"}
+    assert result.palette.shape[0] == 4
+
+    settings.algorithm = "Bayer 4x4"
+    settings.color_count = 8
+    result_ordered = processor.render_preview(settings, max_size=None)
+    assert result_ordered.palette.shape[0] == 8
 
 
-def test_algorithm_spec_flags_controls():
-    diffusion_spec = algorithm_spec("Floyd-Steinberg")
-    assert "amplitude" in diffusion_spec.parameters
-    assert diffusion_spec.parameter_labels.get("amplitude") == "Error Spread"
-    assert diffusion_spec.preview_downsample >= 1
+def test_custom_palette_loader(tmp_path: Path) -> None:
+    processor = ImageProcessor()
+    # Text palette
+    text_palette = tmp_path / "palette.txt"
+    text_palette.write_text("#ff0000\n0 255 0\n0x0000ff\n")
+    palette = processor.load_palette_from_file(text_palette)
+    assert palette.shape[0] == 3
 
-    screen_spec = algorithm_spec("Dot Screen")
-    assert {"amplitude", "rotation"}.issubset(set(screen_spec.parameters))
+    # Image palette
+    image = Image.new("RGB", (2, 2), color=(0, 0, 0))
+    image.putpixel((0, 0), (255, 0, 0))
+    image.putpixel((1, 0), (0, 255, 0))
+    image.putpixel((0, 1), (0, 0, 255))
+    palette_image_path = tmp_path / "palette.png"
+    image.save(palette_image_path)
+    palette_from_image = processor.load_palette_from_file(palette_image_path)
+    assert palette_from_image.shape[0] >= 3
+
+
+def test_serpentine_toggle_changes_output() -> None:
+    # Use a gradient so diffusion direction matters
+    gradient = np.tile(np.linspace(0, 1, 16, dtype=np.float32), (16, 1))
+    data = np.stack([gradient, gradient, gradient], axis=-1)
+    image = Image.fromarray((data * 255).astype(np.uint8))
+    processor = ImageProcessor()
+    processor.set_image(image)
+    settings = DitheringSettings(algorithm="Floyd-Steinberg", color_count=2)
+
+    serpentine = processor.render_preview(settings, max_size=None).image
+    settings.serpentine = False
+    linear = processor.render_preview(settings, max_size=None).image
+    assert serpentine.tobytes() != linear.tobytes()

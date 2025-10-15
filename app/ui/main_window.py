@@ -1,588 +1,467 @@
-"""Main window and UI composition for the dithering studio."""
+"""Qt main window for the Dithering Tool application."""
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Callable
+from typing import Dict, Optional
 
-from PySide6.QtCore import Qt, Signal, Slot
-from PySide6.QtGui import QAction, QImage, QPixmap
+from PIL import Image, ImageDraw
+from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, Signal
+from PySide6.QtGui import QCloseEvent, QImage, QPixmap
 from PySide6.QtWidgets import (
-    QComboBox,
+    QApplication,
     QCheckBox,
+    QComboBox,
     QFileDialog,
     QFormLayout,
-    QGraphicsPixmapItem,
-    QGraphicsScene,
-    QGraphicsView,
     QGroupBox,
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QMainWindow,
     QMessageBox,
     QPushButton,
     QSlider,
+    QSpinBox,
     QSplitter,
-    QToolBar,
+    QStatusBar,
     QVBoxLayout,
     QWidget,
 )
 
-from app.core.dithering import PARAMETER_INFO, algorithm_spec
-from app.core.image_processor import ImageProcessor
-from app.core.models import ProcessingRequest
-from app.core.presets import PresetManager
+from app.core.dithering import algorithm_names, get_algorithm
+from app.core.image_processor import DitheringSettings, ImageProcessor
 
 
-class PreviewView(QGraphicsView):
-    """Zoomable view for image preview."""
+class WorkerSignals(QObject):
+    result = Signal(int, object)
+    error = Signal(int, str)
 
-    zoom_changed = Signal(float)
 
-    def __init__(self) -> None:
+class DitherTask(QRunnable):
+    """Run the dithering pipeline in a background thread."""
+
+    def __init__(self, processor: ImageProcessor, settings: DitheringSettings, generation: int, preview: bool) -> None:
         super().__init__()
-        self.setAlignment(Qt.AlignCenter)
-        self.setBackgroundBrush(self.palette().window().color())
-        self._zoom_level = 1.0
+        self.processor = processor
+        self.settings = settings
+        self.generation = generation
+        self.preview = preview
+        self.signals = WorkerSignals()
 
-    def wheelEvent(self, event):  # type: ignore[override]
-        if event.modifiers() & Qt.ControlModifier:
-            delta = event.angleDelta().y()
-            factor = 1.2 if delta > 0 else 0.8
-            self._zoom_level = max(0.1, min(10.0, self._zoom_level * factor))
-            self.resetTransform()
-            self.scale(self._zoom_level, self._zoom_level)
-            self.zoom_changed.emit(self._zoom_level)
-            event.accept()
-        else:
-            super().wheelEvent(event)
+    def run(self) -> None:  # pragma: no cover - executed in worker threads
+        try:
+            if self.preview:
+                result = self.processor.render_preview(self.settings)
+            else:
+                result = self.processor.render_full(self.settings)
+        except Exception as exc:  # pragma: no cover - surfaced through signal
+            self.signals.error.emit(self.generation, str(exc))
+            return
+        self.signals.result.emit(self.generation, result)
 
 
 class MainWindow(QMainWindow):
-    """Construct the main UI and connect controls."""
+    """Primary window showing the preview and the control sidebar."""
 
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Dither Studio")
+        self.setWindowTitle("Dithering Tool")
+        self.processor = ImageProcessor()
+        self.thread_pool = QThreadPool.globalInstance()
+        self._generation = 0
+        self._last_result = None
+        self._original_image: Optional[Image.Image] = None
 
-        self._scene = QGraphicsScene(self)
-        self._preview_item = QGraphicsPixmapItem()
-        self._scene.addItem(self._preview_item)
+        self._build_ui()
+        self._connect_signals()
 
-        self._view = PreviewView()
-        self._view.setScene(self._scene)
+        self.update_timer = QTimer(self)
+        self.update_timer.setSingleShot(True)
+        self.update_timer.timeout.connect(lambda: self._start_task(preview=True))
 
-        self._processor = ImageProcessor()
-        self._processor.processed.connect(self._update_preview)
-        self._preset_manager = PresetManager(Path.home() / ".dither_studio" / "presets")
-
-        self._source_path: Path | None = None
-        self._pixel_size_steps: tuple[int, ...] = ()
-        self._pixel_size_label: QLabel | None = None
-        self.statusBar()
-        self._setup_ui()
-
-    # ------------------------------------------------------------------ UI SETUP
-    def _setup_ui(self) -> None:
+    # ------------------------------------------------------------------ UI setup
+    def _build_ui(self) -> None:
         central = QWidget()
-        layout = QHBoxLayout(central)
-
-        splitter = QSplitter()
-        splitter.setOrientation(Qt.Horizontal)
-        splitter.addWidget(self._view)
-        splitter.addWidget(self._build_control_panel())
-        splitter.setStretchFactor(0, 2)
-        splitter.setStretchFactor(1, 1)
-
-        layout.addWidget(splitter)
+        main_layout = QHBoxLayout(central)
+        central.setLayout(main_layout)
         self.setCentralWidget(central)
 
-        self._setup_menu()
+        splitter = QSplitter(Qt.Horizontal)
+        main_layout.addWidget(splitter, 1)
 
-    def _setup_menu(self) -> None:
-        toolbar = QToolBar("File")
-        self.addToolBar(Qt.TopToolBarArea, toolbar)
+        # Preview panels -------------------------------------------------------
+        preview_widget = QWidget()
+        preview_layout = QHBoxLayout(preview_widget)
+        preview_layout.setContentsMargins(8, 8, 8, 8)
 
-        open_action = QAction("Open Image", self)
-        open_action.triggered.connect(self._open_image)
-        toolbar.addAction(open_action)
+        self.original_label = QLabel("Load an image to begin")
+        self.original_label.setAlignment(Qt.AlignCenter)
+        self.original_label.setMinimumSize(320, 240)
+        self.original_label.setStyleSheet("background:#111; color:#eee; border:1px solid #333;")
 
-        save_action = QAction("Save Output", self)
-        save_action.triggered.connect(self._save_image)
-        toolbar.addAction(save_action)
+        self.dithered_label = QLabel("Dithered preview")
+        self.dithered_label.setAlignment(Qt.AlignCenter)
+        self.dithered_label.setMinimumSize(320, 240)
+        self.dithered_label.setStyleSheet("background:#111; color:#eee; border:1px solid #333;")
 
-        toolbar.addSeparator()
+        preview_layout.addWidget(self._wrap_with_caption(self.original_label, "Original"))
+        preview_layout.addWidget(self._wrap_with_caption(self.dithered_label, "Dithered"))
+        splitter.addWidget(preview_widget)
 
-        load_preset_action = QAction("Load Preset", self)
-        load_preset_action.triggered.connect(self._load_preset)
-        toolbar.addAction(load_preset_action)
+        # Control sidebar -----------------------------------------------------
+        controls = QWidget()
+        controls_layout = QVBoxLayout(controls)
+        controls_layout.setContentsMargins(8, 8, 8, 8)
+        controls_layout.setSpacing(12)
 
-        save_preset_action = QAction("Save Preset", self)
-        save_preset_action.triggered.connect(self._save_preset)
-        toolbar.addAction(save_preset_action)
+        controls_layout.addLayout(self._build_file_buttons())
+        controls_layout.addWidget(self._build_algorithm_group())
+        controls_layout.addWidget(self._build_palette_group())
+        controls_layout.addWidget(self._build_adjustment_group())
+        controls_layout.addStretch(1)
+        controls_layout.addWidget(self._build_options_group())
 
-    def _build_control_panel(self) -> QWidget:
-        panel = QWidget()
-        panel_layout = QVBoxLayout(panel)
+        splitter.addWidget(controls)
+        splitter.setStretchFactor(0, 3)
+        splitter.setStretchFactor(1, 2)
 
-        panel_layout.addWidget(self._build_algorithm_controls())
-        panel_layout.addWidget(self._build_effect_controls())
-        panel_layout.addWidget(self._build_tone_controls())
-        panel_layout.addWidget(self._build_colour_controls())
-        panel_layout.addWidget(self._build_output_controls())
-        panel_layout.addStretch(1)
+        status = QStatusBar()
+        status.showMessage("Ready")
+        self.setStatusBar(status)
+        self.status_bar = status
 
-        return panel
+    def _wrap_with_caption(self, widget: QWidget, caption: str) -> QWidget:
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        title = QLabel(caption)
+        title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet("color:#ccc; font-weight:bold; padding-bottom:4px;")
+        layout.addWidget(title)
+        layout.addWidget(widget, 1)
+        return container
 
-    # ---------------------------------------------------------------- Algorithms
-    def _build_algorithm_controls(self) -> QWidget:
-        box = QGroupBox("Render Settings")
-        layout = QFormLayout(box)
+    def _build_file_buttons(self) -> QHBoxLayout:
+        layout = QHBoxLayout()
+        self.load_button = QPushButton("Load Image…")
+        self.save_button = QPushButton("Save Dithered Image…")
+        self.reset_button = QPushButton("Reset")
+        self.save_button.setEnabled(False)
+        self.reset_button.setEnabled(False)
+        layout.addWidget(self.load_button)
+        layout.addWidget(self.save_button)
+        layout.addWidget(self.reset_button)
+        return layout
 
-        self._algorithm_combo = QComboBox()
-        self._algorithm_combo.addItems(self._processor.available_algorithms)
-        self._algorithm_combo.currentTextChanged.connect(self._on_algorithm_changed)
-        layout.addRow("Algorithm", self._algorithm_combo)
+    def _build_algorithm_group(self) -> QGroupBox:
+        group = QGroupBox("Algorithm")
+        layout = QFormLayout(group)
 
-        self._threshold_slider = self._make_slider(0, 255, 127, self._queue_update)
-        layout.addRow("Light Threshold", self._threshold_slider)
-        self._threshold_slider.setToolTip(
-            "Sets the luminance break-point between dark ink and light paper." 
-        )
+        self.algorithm_combo = QComboBox()
+        for name in algorithm_names():
+            algorithm = get_algorithm(name)
+            self.algorithm_combo.addItem(name)
+            self.algorithm_combo.setItemData(self.algorithm_combo.count() - 1, algorithm.description, Qt.ToolTipRole)
 
-        self._amplitude_slider = self._make_slider(0, 300, 150, self._queue_update)
-        layout.addRow(PARAMETER_INFO["amplitude"].label, self._amplitude_slider)
-        self._amplitude_slider.setToolTip(PARAMETER_INFO["amplitude"].tooltip)
+        self.serpentine_box = QCheckBox("Serpentine scan")
+        self.serpentine_box.setChecked(True)
 
-        self._frequency_slider = self._make_slider(1, 40, 10, self._queue_update)
-        layout.addRow(PARAMETER_INFO["frequency"].label, self._frequency_slider)
-        self._frequency_slider.setToolTip(PARAMETER_INFO["frequency"].tooltip)
+        layout.addRow("Mode", self.algorithm_combo)
+        layout.addRow("", self.serpentine_box)
+        return group
 
-        self._period_slider = self._make_slider(1, 96, 12, self._queue_update)
-        layout.addRow(PARAMETER_INFO["period"].label, self._period_slider)
-        self._period_slider.setToolTip(PARAMETER_INFO["period"].tooltip)
+    def _build_palette_group(self) -> QGroupBox:
+        group = QGroupBox("Palette")
+        layout = QFormLayout(group)
 
-        self._slope_slider = self._make_slider(-150, 150, 0, self._queue_update)
-        layout.addRow(PARAMETER_INFO["slope"].label, self._slope_slider)
-        self._slope_slider.setToolTip(PARAMETER_INFO["slope"].tooltip)
+        self.color_count_spin = QSpinBox()
+        self.color_count_spin.setRange(2, 64)
+        self.color_count_spin.setValue(8)
 
-        self._rotation_slider = self._make_slider(-135, 135, 0, self._queue_update)
-        layout.addRow(PARAMETER_INFO["rotation"].label, self._rotation_slider)
-        self._rotation_slider.setToolTip(PARAMETER_INFO["rotation"].tooltip)
+        self.palette_combo = QComboBox()
+        for name in self.processor.available_palettes:
+            self.palette_combo.addItem(name)
 
-        self._pixel_size_steps = (1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24, 28, 32, 40, 48)
-        self._pixel_size_slider = self._make_slider(0, len(self._pixel_size_steps) - 1, 0, self._on_pixel_size_changed)
-        layout.addRow("Dither Resolution", self._pixel_size_slider)
-        self._pixel_size_slider.setToolTip(
-            "Down-sample the working image to emulate coarse pixels before halftoning."
-        )
-        self._pixel_size_label = layout.labelForField(self._pixel_size_slider)
-        self._on_pixel_size_changed(self._pixel_size_slider.value())
+        self.palette_preview = QLabel()
+        self.palette_preview.setFixedHeight(36)
+        self.palette_preview.setMinimumWidth(160)
+        self.palette_preview.setAlignment(Qt.AlignCenter)
+        self.palette_preview.setStyleSheet("border:1px solid #333; background:#111;")
+        self.palette_preview.setScaledContents(True)
 
-        self._parameter_widgets = {
-            "amplitude": self._amplitude_slider,
-            "frequency": self._frequency_slider,
-            "period": self._period_slider,
-            "slope": self._slope_slider,
-            "rotation": self._rotation_slider,
-        }
-        self._parameter_labels = {}
-        for name, widget in self._parameter_widgets.items():
-            label = layout.labelForField(widget)
-            if label is not None:
-                info = PARAMETER_INFO.get(name)
-                if info is not None:
-                    label.setText(info.label)
-                    label.setToolTip(info.tooltip)
-                    widget.setToolTip(info.tooltip)
-                self._parameter_labels[name] = label
+        self.load_palette_button = QPushButton("Load Custom Palette…")
 
-        self._on_algorithm_changed(self._algorithm_combo.currentText())
+        layout.addRow("Colors", self.color_count_spin)
+        layout.addRow("Palette", self.palette_combo)
+        layout.addRow(self.load_palette_button)
+        layout.addRow("Swatches", self.palette_preview)
+        return group
 
-        return box
+    def _build_adjustment_group(self) -> QGroupBox:
+        group = QGroupBox("Image Adjustments")
+        layout = QVBoxLayout(group)
 
-    # ---------------------------------------------------------------- Effects
-    def _build_effect_controls(self) -> QWidget:
-        box = QGroupBox("Effects")
-        layout = QFormLayout(box)
+        self.sliders: Dict[str, QSlider] = {}
+        self.value_labels: Dict[str, QLabel] = {}
 
-        self._glow_slider = self._make_slider(0, 50, 0, self._queue_update)
-        layout.addRow("Glow Radius", self._glow_slider)
+        layout.addLayout(self._add_slider("brightness", "Brightness", -100, 100, 0, lambda v: f"{v/100:.2f}"))
+        layout.addLayout(self._add_slider("contrast", "Contrast", -100, 100, 0, lambda v: f"{v/100:.2f}"))
+        layout.addLayout(self._add_slider("gamma", "Gamma", 50, 220, 100, lambda v: f"{v/100:.2f}"))
+        layout.addLayout(self._add_slider("blur", "Blur Radius", 0, 50, 0, lambda v: f"{v/10:.1f}px"))
+        layout.addLayout(self._add_slider("sharpen", "Sharpen", 0, 100, 0, lambda v: f"{v/100:.2f}"))
+        layout.addLayout(self._add_slider("denoise", "Denoise", 0, 100, 0, lambda v: f"{v/100:.2f}"))
+        return group
 
-        self._noise_slider = self._make_slider(0, 100, 0, self._queue_update)
-        layout.addRow("Noise", self._noise_slider)
-
-        self._sharpness_slider = self._make_slider(0, 100, 50, self._queue_update)
-        layout.addRow("Sharpen", self._sharpness_slider)
-
-        return box
-
-    def _build_tone_controls(self) -> QWidget:
-        box = QGroupBox("Tone & FX")
-        layout = QFormLayout(box)
-
-        self._gamma_slider = self._make_slider(10, 300, 100, self._queue_update)
-        layout.addRow("Gamma", self._gamma_slider)
-
-        self._contrast_slider = self._make_slider(0, 200, 100, self._queue_update)
-        layout.addRow("Contrast", self._contrast_slider)
-
-        self._saturation_slider = self._make_slider(0, 200, 100, self._queue_update)
-        layout.addRow("Saturation", self._saturation_slider)
-
-        self._hue_slider = self._make_slider(-180, 180, 0, self._queue_update)
-        layout.addRow("Hue Shift", self._hue_slider)
-
-        self._edge_slider = self._make_slider(0, 100, 0, self._queue_update)
-        layout.addRow("Edge Boost", self._edge_slider)
-
-        self._posterize_slider = self._make_slider(0, 8, 0, self._queue_update)
-        layout.addRow("Posterize Levels", self._posterize_slider)
-
-        self._blend_slider = self._make_slider(0, 100, 0, self._queue_update)
-        layout.addRow("Blend Original", self._blend_slider)
-
-        self._vignette_slider = self._make_slider(0, 100, 0, self._queue_update)
-        layout.addRow("Vignette", self._vignette_slider)
-
-        self._invert_toggle = QCheckBox("Invert Output")
-        self._invert_toggle.stateChanged.connect(self._queue_update)
-        layout.addRow(self._invert_toggle)
-
-        return box
-
-    # --------------------------------------------------------------- Colour Tools
-    def _build_colour_controls(self) -> QWidget:
-        box = QGroupBox("Colour Controls")
-        layout = QFormLayout(box)
-
-        self._colour_mode_combo = QComboBox()
-        self._colour_mode_combo.addItems(self._processor.available_colour_modes)
-        self._colour_mode_combo.currentTextChanged.connect(self._queue_update)
-        layout.addRow("Colour Mode", self._colour_mode_combo)
-
-        self._red_slider = self._make_slider(0, 200, 100, self._queue_update)
-        self._green_slider = self._make_slider(0, 200, 100, self._queue_update)
-        self._blue_slider = self._make_slider(0, 200, 100, self._queue_update)
-
-        layout.addRow("Red", self._red_slider)
-        layout.addRow("Green", self._green_slider)
-        layout.addRow("Blue", self._blue_slider)
-
-        self._palette_combo = QComboBox()
-        self._palette_combo.addItems(self._processor.available_palettes)
-        self._palette_combo.currentTextChanged.connect(self._on_palette_changed)
-        layout.addRow("Palette", self._palette_combo)
-
-        two_color_layout = QHBoxLayout()
-        self._color_a_input = QLineEdit("#000000")
-        self._color_b_input = QLineEdit("#FFFFFF")
-        for widget in (self._color_a_input, self._color_b_input):
-            widget.editingFinished.connect(self._queue_update)
-        two_color_layout.addWidget(QLabel("Dark"))
-        two_color_layout.addWidget(self._color_a_input)
-        two_color_layout.addWidget(QLabel("Light"))
-        two_color_layout.addWidget(self._color_b_input)
-        layout.addRow(two_color_layout)
-
-        self._on_palette_changed(self._palette_combo.currentText())
-
-        return box
-
-    # --------------------------------------------------------------- Output Tools
-    def _build_output_controls(self) -> QWidget:
-        box = QGroupBox("Output")
-        layout = QVBoxLayout(box)
-
-        self._zoom_label = QLabel("Zoom: 100%")
-        self._view.zoom_changed.connect(self._on_zoom_changed)
-
-        self._render_button = QPushButton("Render Full Resolution")
-        self._render_button.clicked.connect(self._render_full_resolution)
-
-        layout.addWidget(self._zoom_label)
-        layout.addWidget(self._render_button)
-
-        return box
-
-    # ----------------------------------------------------------------- Utilities
-    def _make_slider(self, minimum: int, maximum: int, value: int, slot: Callable[[int], None]) -> QSlider:
+    def _add_slider(self, key: str, label: str, minimum: int, maximum: int, default: int, formatter) -> QHBoxLayout:
+        row = QHBoxLayout()
+        title = QLabel(label)
         slider = QSlider(Qt.Horizontal)
         slider.setRange(minimum, maximum)
-        slider.setValue(value)
-        slider.valueChanged.connect(slot)
-        slider.setSingleStep(1)
-        return slider
+        slider.setValue(default)
+        value_label = QLabel(formatter(default))
+        value_label.setFixedWidth(70)
+        slider.valueChanged.connect(lambda value, f=formatter, lbl=value_label: lbl.setText(f(value)))
+        slider.valueChanged.connect(lambda _value: self.schedule_preview())
 
-    # ----------------------------------------------------------------- Callbacks
-    def _open_image(self) -> None:
-        file_path, _ = QFileDialog.getOpenFileName(
+        row.addWidget(title)
+        row.addWidget(slider, 1)
+        row.addWidget(value_label)
+        self.sliders[key] = slider
+        self.value_labels[key] = value_label
+        return row
+
+    def _build_options_group(self) -> QGroupBox:
+        group = QGroupBox("Options")
+        layout = QVBoxLayout(group)
+        self.preserve_brightness_box = QCheckBox("Preserve brightness (linear)")
+        self.transparent_box = QCheckBox("Transparent background")
+        self.transparent_box.setChecked(True)
+        layout.addWidget(self.preserve_brightness_box)
+        layout.addWidget(self.transparent_box)
+        return group
+
+    # ----------------------------------------------------------------- signals
+    def _connect_signals(self) -> None:
+        self.load_button.clicked.connect(self.load_image)
+        self.save_button.clicked.connect(self.save_image)
+        self.reset_button.clicked.connect(self.reset_controls)
+        self.algorithm_combo.currentIndexChanged.connect(self._on_algorithm_change)
+        self.serpentine_box.stateChanged.connect(lambda _state: self.schedule_preview())
+        self.color_count_spin.valueChanged.connect(lambda _value: self.schedule_preview())
+        self.palette_combo.currentIndexChanged.connect(lambda _value: self.schedule_preview())
+        self.load_palette_button.clicked.connect(self._select_palette_file)
+        self.preserve_brightness_box.stateChanged.connect(lambda _value: self.schedule_preview())
+        self.transparent_box.stateChanged.connect(lambda _value: self.schedule_preview())
+
+    # ----------------------------------------------------------------- actions
+    def load_image(self) -> None:
+        file_name, _ = QFileDialog.getOpenFileName(
             self,
-            "Select an image",
-            str(Path.home()),
-            "Images (*.png *.jpg *.jpeg *.bmp *.tif *.tiff)",
+            "Open Image",
+            "",
+            "Images (*.png *.jpg *.jpeg *.bmp *.gif)",
         )
-        if file_path:
-            path = Path(file_path)
-            try:
-                self._processor.load_image(path)
-                self._source_path = path
-                self.statusBar().showMessage(f"Loaded {path.name}", 5000)
-                self._queue_update()
-            except Exception as exc:  # pragma: no cover - Qt dialog
-                QMessageBox.critical(self, "Load Error", str(exc))
-
-    def _save_image(self) -> None:
-        if not self._processor.has_image:
-            QMessageBox.information(self, "No image", "Load an image before saving.")
+        if not file_name:
             return
-        file_path, _ = QFileDialog.getSaveFileName(
+        try:
+            image = Image.open(file_name)
+        except Exception as exc:
+            QMessageBox.critical(self, "Load failed", f"Could not open image: {exc}")
+            return
+        self.processor.set_image(image)
+        self._original_image = image if image.mode in {"RGB", "RGBA"} else image.convert("RGBA")
+        self._last_result = None
+        self._update_original_preview(image)
+        self.save_button.setEnabled(True)
+        self.reset_button.setEnabled(True)
+        self.status_bar.showMessage(f"Loaded {Path(file_name).name}")
+        self.schedule_preview()
+
+    def save_image(self) -> None:
+        if not self.processor.has_image:
+            return
+        settings = self._gather_settings()
+        file_name, _ = QFileDialog.getSaveFileName(
             self,
             "Save Dithered Image",
-            str(self._source_path.parent if self._source_path else Path.home()),
-            "PNG Image (*.png)",
+            "dithered.png",
+            "Images (*.png *.bmp *.jpg *.gif)",
         )
-        if file_path:
-            try:
-                self._processor.save_output(Path(file_path))
-                self.statusBar().showMessage("Image saved", 5000)
-            except Exception as exc:  # pragma: no cover - Qt dialog
-                QMessageBox.critical(self, "Save Error", str(exc))
-
-    def _save_preset(self) -> None:
-        if not self._processor.has_image:
-            QMessageBox.information(self, "No image", "Load an image before saving a preset.")
+        if not file_name:
             return
-        name, ok = QFileDialog.getSaveFileName(
-            self,
-            "Save Preset",
-            str(self._preset_manager.preset_dir),
-            "Preset (*.json)",
-        )
-        if ok and name:
-            self._preset_manager.save(Path(name), self._gather_settings())
-            self.statusBar().showMessage("Preset saved", 5000)
+        self.status_bar.showMessage("Rendering full resolution…")
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            result = self.processor.render_full(settings)
+            result.image.save(file_name)
+        except Exception as exc:
+            QMessageBox.critical(self, "Save failed", f"Could not save image: {exc}")
+        finally:
+            QApplication.restoreOverrideCursor()
+        self.status_bar.showMessage(f"Saved {Path(file_name).name}")
 
-    def _load_preset(self) -> None:
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Load Preset",
-            str(self._preset_manager.preset_dir),
-            "Preset (*.json)",
-        )
-        if file_path:
-            settings = self._preset_manager.load(Path(file_path))
-            self._apply_settings(settings)
-            self._queue_update()
-
-    def _gather_settings(self) -> dict:
-        return {
-            "algorithm": self._algorithm_combo.currentText(),
-            "threshold": self._threshold_slider.value(),
-            "amplitude": self._amplitude_slider.value(),
-            "frequency": self._frequency_slider.value(),
-            "period": self._period_slider.value(),
-            "slope": self._slope_slider.value(),
-            "rotation": self._rotation_slider.value(),
-            "pixel_size": self._current_pixel_size(),
-            "pixel_size_index": self._pixel_size_slider.value(),
-            "glow": self._glow_slider.value(),
-            "noise": self._noise_slider.value(),
-            "sharpen": self._sharpness_slider.value(),
-            "red": self._red_slider.value(),
-            "green": self._green_slider.value(),
-            "blue": self._blue_slider.value(),
-            "colour_mode": self._colour_mode_combo.currentText(),
-            "palette_mode": self._palette_combo.currentText(),
-            "two_colour_mode": self._palette_combo.currentText(),
-            "colour_a": self._color_a_input.text(),
-            "colour_b": self._color_b_input.text(),
-            "gamma": self._gamma_slider.value(),
-            "contrast": self._contrast_slider.value(),
-            "saturation": self._saturation_slider.value(),
-            "hue": self._hue_slider.value(),
-            "edge": self._edge_slider.value(),
-            "posterize": self._posterize_slider.value(),
-            "blend": self._blend_slider.value(),
-            "invert": self._invert_toggle.isChecked(),
-            "vignette": self._vignette_slider.value(),
+    def reset_controls(self) -> None:
+        self.algorithm_combo.setCurrentIndex(0)
+        self.serpentine_box.setChecked(True)
+        self.color_count_spin.setValue(8)
+        self.palette_combo.setCurrentIndex(0)
+        self.preserve_brightness_box.setChecked(False)
+        self.transparent_box.setChecked(True)
+        defaults = {
+            "brightness": 0,
+            "contrast": 0,
+            "gamma": 100,
+            "blur": 0,
+            "sharpen": 0,
+            "denoise": 0,
         }
+        for key, value in defaults.items():
+            self.sliders[key].blockSignals(True)
+            self.sliders[key].setValue(value)
+            self.sliders[key].blockSignals(False)
+        self.schedule_preview()
 
-    def _apply_settings(self, settings: dict) -> None:
-        def set_value(widget, key, setter: Callable):
-            if key in settings:
-                setter(settings[key])
-
-        set_value(self._algorithm_combo, "algorithm", self._algorithm_combo.setCurrentText)
-        set_value(self._threshold_slider, "threshold", self._threshold_slider.setValue)
-        set_value(self._amplitude_slider, "amplitude", self._amplitude_slider.setValue)
-        set_value(self._frequency_slider, "frequency", self._frequency_slider.setValue)
-        set_value(self._period_slider, "period", self._period_slider.setValue)
-        set_value(self._slope_slider, "slope", self._slope_slider.setValue)
-        set_value(self._rotation_slider, "rotation", self._rotation_slider.setValue)
-        if "pixel_size" in settings:
-            self._set_pixel_size_from_value(int(settings["pixel_size"]))
-        elif "pixel_size_index" in settings:
-            self._pixel_size_slider.setValue(int(settings["pixel_size_index"]))
-        set_value(self._glow_slider, "glow", self._glow_slider.setValue)
-        set_value(self._noise_slider, "noise", self._noise_slider.setValue)
-        set_value(self._sharpness_slider, "sharpen", self._sharpness_slider.setValue)
-        set_value(self._red_slider, "red", self._red_slider.setValue)
-        set_value(self._green_slider, "green", self._green_slider.setValue)
-        set_value(self._blue_slider, "blue", self._blue_slider.setValue)
-        set_value(self._color_a_input, "colour_a", self._color_a_input.setText)
-        set_value(self._color_b_input, "colour_b", self._color_b_input.setText)
-        set_value(self._gamma_slider, "gamma", self._gamma_slider.setValue)
-        set_value(self._contrast_slider, "contrast", self._contrast_slider.setValue)
-        set_value(self._saturation_slider, "saturation", self._saturation_slider.setValue)
-        set_value(self._hue_slider, "hue", self._hue_slider.setValue)
-        set_value(self._edge_slider, "edge", self._edge_slider.setValue)
-        set_value(self._posterize_slider, "posterize", self._posterize_slider.setValue)
-        set_value(self._blend_slider, "blend", self._blend_slider.setValue)
-        set_value(self._invert_toggle, "invert", self._invert_toggle.setChecked)
-        set_value(self._vignette_slider, "vignette", self._vignette_slider.setValue)
-        set_value(self._colour_mode_combo, "colour_mode", self._colour_mode_combo.setCurrentText)
-        set_value(self._palette_combo, "palette_mode", self._palette_combo.setCurrentText)
-        set_value(self._palette_combo, "two_colour_mode", self._palette_combo.setCurrentText)
-        self._on_palette_changed(self._palette_combo.currentText())
-
-    def _on_algorithm_changed(self, algorithm: str) -> None:
-        spec = algorithm_spec(algorithm)
-        active = set(spec.parameters)
-        for name, widget in self._parameter_widgets.items():
-            enabled = name in active
-            widget.setEnabled(enabled)
-            label = self._parameter_labels.get(name)
-            info = PARAMETER_INFO.get(name)
-            label_override = spec.parameter_labels.get(name)
-            tooltip_override = spec.parameter_tooltips.get(name)
-            tooltip = tooltip_override or (info.tooltip if info else "")
-            if label is not None:
-                label.setEnabled(enabled)
-                if info is not None:
-                    label.setText(label_override or info.label)
-                    label.setToolTip(tooltip)
-            if info is not None:
-                widget.setToolTip(tooltip)
-        self._queue_update()
-
-    def _queue_update(self) -> None:
-        if not self._processor.has_image:
-            return
-        request = ProcessingRequest(
-            algorithm=self._algorithm_combo.currentText(),
-            threshold=self._threshold_slider.value(),
-            amplitude=self._amplitude_slider.value() / 100.0,
-            frequency=self._frequency_slider.value(),
-            period=self._period_slider.value(),
-            slope=self._slope_slider.value() / 100.0,
-            pixel_size=self._current_pixel_size(),
-            glow_radius=self._glow_slider.value(),
-            noise_level=self._noise_slider.value() / 100.0,
-            sharpen_amount=self._sharpness_slider.value() / 100.0,
-            red_scale=self._red_slider.value() / 100.0,
-            green_scale=self._green_slider.value() / 100.0,
-            blue_scale=self._blue_slider.value() / 100.0,
-            colour_mode=self._colour_mode_combo.currentText(),
-            palette_mode=self._palette_combo.currentText(),
-            colour_a=self._color_a_input.text(),
-            colour_b=self._color_b_input.text(),
-            full_resolution=False,
-            gamma=self._gamma_slider.value() / 100.0,
-            contrast=self._contrast_slider.value() / 100.0,
-            saturation=self._saturation_slider.value() / 100.0,
-            hue_shift=self._hue_slider.value(),
-            edge_boost=self._edge_slider.value() / 100.0,
-            posterize_levels=self._posterize_slider.value(),
-            blend_original=self._blend_slider.value() / 100.0,
-            invert_output=self._invert_toggle.isChecked(),
-            vignette_strength=self._vignette_slider.value() / 100.0,
-            rotation=self._rotation_slider.value(),
+    def _select_palette_file(self) -> None:
+        file_name, _ = QFileDialog.getOpenFileName(
+            self,
+            "Load Palette",
+            "",
+            "Palette files (*.png *.jpg *.jpeg *.bmp *.gif *.txt *.pal *.gpl)",
         )
-        self._processor.enqueue(request)
-
-    def _on_pixel_size_changed(self, index: int) -> None:
-        actual = self._current_pixel_size(index)
-        if self._pixel_size_label is not None:
-            self._pixel_size_label.setText(f"Dither Resolution ({actual}px)")
-            self._pixel_size_label.setToolTip(
-                "Down-sample the working image to emulate coarse pixels before halftoning."
-            )
-        self._queue_update()
-
-    def _current_pixel_size(self, index: int | None = None) -> int:
-        if not self._pixel_size_steps:
-            return 1
-        value = self._pixel_size_slider.value() if index is None else index
-        value = max(0, min(value, len(self._pixel_size_steps) - 1))
-        return self._pixel_size_steps[value]
-
-    def _set_pixel_size_from_value(self, value: int) -> None:
-        if not self._pixel_size_steps:
+        if not file_name:
             return
-        if value in self._pixel_size_steps:
-            index = self._pixel_size_steps.index(value)
-        elif 0 <= value <= self._pixel_size_slider.maximum():
-            index = int(value)
+        try:
+            palette = self.processor.load_palette_from_file(Path(file_name))
+        except Exception as exc:
+            QMessageBox.critical(self, "Palette load failed", f"Could not load palette: {exc}")
+            return
+        self.status_bar.showMessage(f"Loaded palette with {len(palette)} colours")
+        self.palette_combo.setCurrentText("Custom Palette")
+        self.schedule_preview()
+
+    # ---------------------------------------------------------------- updates
+    def schedule_preview(self) -> None:
+        if not self.processor.has_image:
+            return
+        self.update_timer.start(200)
+
+    def _start_task(self, preview: bool) -> None:
+        if not self.processor.has_image:
+            return
+        self._generation += 1
+        settings = self._gather_settings()
+        task = DitherTask(self.processor, settings, self._generation, preview)
+        task.signals.result.connect(self._on_task_result)
+        task.signals.error.connect(self._on_task_error)
+        self.thread_pool.start(task)
+        if preview:
+            self.status_bar.showMessage("Rendering preview…")
+
+    def _on_task_result(self, generation: int, result) -> None:
+        if generation != self._generation:
+            return
+        self._last_result = result
+        pixmap = self._pixmap_from_image(result.image)
+        self._update_dithered_preview(pixmap)
+        self._update_palette_preview(result.palette)
+        self.status_bar.showMessage("Preview ready")
+
+    def _on_task_error(self, generation: int, message: str) -> None:
+        if generation != self._generation:
+            return
+        QMessageBox.critical(self, "Processing error", message)
+        self.status_bar.showMessage("Processing error")
+
+    # ---------------------------------------------------------------- helpers
+    def _gather_settings(self) -> DitheringSettings:
+        settings = DitheringSettings()
+        settings.algorithm = self.algorithm_combo.currentText()
+        settings.serpentine = self.serpentine_box.isChecked()
+        settings.color_count = self.color_count_spin.value()
+        settings.palette_mode = self.palette_combo.currentText()
+        settings.brightness = self.sliders["brightness"].value() / 100.0
+        settings.contrast = self.sliders["contrast"].value() / 100.0
+        settings.gamma = max(0.1, self.sliders["gamma"].value() / 100.0)
+        settings.blur_radius = self.sliders["blur"].value() / 10.0
+        settings.sharpen_amount = self.sliders["sharpen"].value() / 100.0
+        settings.denoise_strength = self.sliders["denoise"].value() / 100.0
+        settings.preserve_brightness = self.preserve_brightness_box.isChecked()
+        settings.transparent_background = self.transparent_box.isChecked()
+        return settings
+
+    def _update_original_preview(self, image: Image.Image) -> None:
+        pixmap = self._pixmap_from_image(image)
+        if pixmap.isNull():
+            return
+        target_size = self.original_label.size()
+        if target_size.width() == 0 or target_size.height() == 0:
+            self.original_label.setPixmap(pixmap)
         else:
-            differences = [abs(step - value) for step in self._pixel_size_steps]
-            index = int(min(range(len(self._pixel_size_steps)), key=lambda i: differences[i]))
-        self._pixel_size_slider.setValue(index)
+            self.original_label.setPixmap(
+                pixmap.scaled(target_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            )
 
-    def _on_palette_changed(self, text: str) -> None:
-        custom = text == "Custom Two-Tone"
-        self._color_a_input.setEnabled(custom)
-        self._color_b_input.setEnabled(custom)
-        self._queue_update()
-
-    @Slot(QImage, bool)
-    def _update_preview(self, image: QImage, full_resolution: bool) -> None:
-        pixmap = QPixmap.fromImage(image)
-        self._preview_item.setPixmap(pixmap)
-        self._scene.setSceneRect(pixmap.rect())
-        if full_resolution:
-            self.statusBar().showMessage("Full resolution render complete", 5000)
-
-    def _render_full_resolution(self) -> None:
-        if not self._processor.has_image:
-            QMessageBox.information(self, "No image", "Load an image before rendering.")
+    def _update_dithered_preview(self, pixmap: QPixmap) -> None:
+        if pixmap.isNull():
             return
-        request = ProcessingRequest(
-            algorithm=self._algorithm_combo.currentText(),
-            threshold=self._threshold_slider.value(),
-            amplitude=self._amplitude_slider.value() / 100.0,
-            frequency=self._frequency_slider.value(),
-            period=self._period_slider.value(),
-            slope=self._slope_slider.value() / 100.0,
-            pixel_size=self._current_pixel_size(),
-            glow_radius=self._glow_slider.value(),
-            noise_level=self._noise_slider.value() / 100.0,
-            sharpen_amount=self._sharpness_slider.value() / 100.0,
-            red_scale=self._red_slider.value() / 100.0,
-            green_scale=self._green_slider.value() / 100.0,
-            blue_scale=self._blue_slider.value() / 100.0,
-            colour_mode=self._colour_mode_combo.currentText(),
-            palette_mode=self._palette_combo.currentText(),
-            colour_a=self._color_a_input.text(),
-            colour_b=self._color_b_input.text(),
-            full_resolution=True,
-            gamma=self._gamma_slider.value() / 100.0,
-            contrast=self._contrast_slider.value() / 100.0,
-            saturation=self._saturation_slider.value() / 100.0,
-            hue_shift=self._hue_slider.value(),
-            edge_boost=self._edge_slider.value() / 100.0,
-            posterize_levels=self._posterize_slider.value(),
-            blend_original=self._blend_slider.value() / 100.0,
-            invert_output=self._invert_toggle.isChecked(),
-            vignette_strength=self._vignette_slider.value() / 100.0,
-            rotation=self._rotation_slider.value(),
-        )
-        self._processor.enqueue(request)
+        target_size = self.dithered_label.size()
+        if target_size.width() == 0 or target_size.height() == 0:
+            self.dithered_label.setPixmap(pixmap)
+        else:
+            self.dithered_label.setPixmap(
+                pixmap.scaled(target_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            )
 
-    def _on_zoom_changed(self, zoom: float) -> None:
-        self._zoom_label.setText(f"Zoom: {int(zoom * 100)}%")
+    def resizeEvent(self, event) -> None:  # pragma: no cover - UI callback
+        super().resizeEvent(event)
+        if self.original_label.pixmap() and self._original_image is not None:
+            self._update_original_preview(self._original_image)
+        if self.dithered_label.pixmap() and self._last_result is not None:
+            pixmap = self._pixmap_from_image(self._last_result.image)
+            self._update_dithered_preview(pixmap)
 
-    # ----------------------------------------------------------------- Properties
-    @property
-    def processor(self) -> ImageProcessor:
-        return self._processor
+    def closeEvent(self, event: QCloseEvent) -> None:  # pragma: no cover - UI callback
+        self.thread_pool.waitForDone(1000)
+        super().closeEvent(event)
+
+    def _pixmap_from_image(self, image: Image.Image) -> QPixmap:
+        if image.mode not in {"RGB", "RGBA"}:
+            converted = image.convert("RGBA")
+        else:
+            converted = image
+        data = converted.tobytes("raw", converted.mode)
+        if converted.mode == "RGBA":
+            qimage = QImage(data, converted.width, converted.height, QImage.Format_RGBA8888)
+        else:
+            qimage = QImage(data, converted.width, converted.height, QImage.Format_RGB888)
+        return QPixmap.fromImage(qimage.copy())
+
+    def _update_palette_preview(self, palette) -> None:
+        try:
+            length = len(palette)
+        except TypeError:
+            length = int(getattr(palette, "size", 0))
+        if length == 0:
+            self.palette_preview.clear()
+            return
+        swatch_width = 24
+        swatch_height = 24
+        if hasattr(palette, "tolist"):
+            palette_list = palette.tolist()
+        else:
+            palette_list = list(palette)
+        image = Image.new("RGB", (swatch_width * max(len(palette_list), 1), swatch_height), color=(0, 0, 0))
+        draw = ImageDraw.Draw(image)
+        for index, colour in enumerate(palette_list):
+            x0 = index * swatch_width
+            draw.rectangle([x0, 0, x0 + swatch_width - 1, swatch_height], fill=tuple(int(c) for c in colour))
+        pixmap = self._pixmap_from_image(image)
+        self.palette_preview.setPixmap(pixmap)
+
+    def _on_algorithm_change(self) -> None:
+        name = self.algorithm_combo.currentText()
+        algorithm = get_algorithm(name)
+        if algorithm.kind != "error_diffusion":
+            self.serpentine_box.setEnabled(False)
+        else:
+            self.serpentine_box.setEnabled(True)
+        self.schedule_preview()

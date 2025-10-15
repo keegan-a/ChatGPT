@@ -1,68 +1,63 @@
-# Dither Studio
+# Dithering Tool
 
-A monochrome desktop application for exploring over forty dithering and halftone modulation algorithms. The interface is inspired by the provided reference screenshots with grouped controls, sliders paired with numeric values, and dark panels.
+Dithering Tool is a cross-platform desktop application that emulates the creative controls of high-end halftone plug-ins. It lets you compare an original image with its dithered counterpart, experiment with classic and retro palettes, and export the result in a single click.
 
-## Features
+## Highlights
 
-- Load any raster image and preview changes in real time thanks to a background processing queue and down-scaled preview renders.
-- Choose from a variety of error-diffusion and modulation algorithms including Floyd–Steinberg, Jarvis–Judice–Ninke, blue-noise clustering, spiral/line/dot screens, glitch strata, and more.
-- Blue-noise clustering and other creative modes have been tuned for stable output without random failures.
-- Adjust threshold plus algorithm-specific parameters with labels that adapt to each algorithm (e.g. error-spread for diffusion, cluster contrast for blue-noise, pattern scale for halftones).
-- Dial in block size with the Dither Resolution control, which now offers finer increments for subtle down-sampling as well as bold pixel-art reductions.
-- Switch between RGB balance, monochrome luma, indexed 4/8 levels, retro 16-bit/8-bit quantisation, neon and CMYK composite modes.
-- Explore a library of vintage palettes (Game Boy, CGA, Commodore 64, ZX Spectrum, CMYK print, vaporwave, etc.) or dial in a custom two-tone map alongside RGB channel scaling (0–200%).
-- Creative tone sculpting with gamma, contrast, saturation, hue shift, edge emphasis, vignette strength, invert, posterise, original-image blend controls, plus a highlight-aware glow effect instead of a simple blur.
-- Zoomable preview with Control + mouse wheel and full-resolution rendering on demand.
-- Save and load presets for the entire control stack.
+- **Side-by-side preview** of the source and processed image with automatic scaling.
+- **Extensive algorithm catalogue** including Floyd–Steinberg, Jarvis–Judice–Ninke, Stucki, Atkinson, Burkes, Sierra (2-row), Sierra Lite (2-4A), Bayer 2×2/4×4/8×8, Clustered Dot, and Random dithering.
+- **Serpentine scanning toggle** for diffusion modes to reduce directional artefacts.
+- **Palette management** with adaptive palettes, grayscale ramps, Game Boy, NES, CGA presets, and a custom palette loader (image or text).
+- **Colour depth controls** via a “Number of Colors” spinner (2–64) that constrains the quantisation palette.
+- **Image adjustments** for brightness, contrast, gamma, Gaussian blur, sharpening, and denoising applied before dithering.
+- **Linear light processing** option to preserve brightness during error diffusion.
+- **Transparency handling** so alpha channels can be preserved when saving PNGs.
+- **Background rendering** with a responsive Qt interface and quick-save workflow.
 
-## Getting started
+## Requirements
 
-### 1. Install Python 3.10+
+- Python 3.10+
+- The libraries listed in `requirements.txt` (NumPy, Pillow, PySide6, OpenCV, scikit-image, imageio).
 
-Any recent CPython release will work, but the UI has been tested most on Python 3.10 and 3.11.
-
-### 2. Create and activate a virtual environment
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-```
-
-> [!TIP]
-> On Windows (PowerShell) run ``.\.venv\Scripts\Activate.ps1`` instead.
-
-### 3. Install dependencies
+Install the dependencies with:
 
 ```bash
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-If you still see `ModuleNotFoundError: No module named 'PySide6'`, double-check that your shell is using the virtual environment and try `python -m pip install PySide6` manually.
+## Running the application
 
-### 4. Launch the application
+1. (Optional) Create and activate a virtual environment.
+2. Install the requirements as shown above.
+3. Launch the UI:
 
 ```bash
 python -m app
 ```
 
-This command uses the module entry point so it works regardless of your current working directory inside the project.
+The window titled **“Dithering Tool”** will open. Click **Load Image…** to select a PNG, JPEG, GIF, or BMP. The preview updates automatically as you tweak settings. Use **Save Dithered Image…** to export the processed image (PNG, BMP, JPG, or GIF).
 
-### Troubleshooting
+## Custom palette loading
 
-- **Linux Qt platform plugin errors** such as `Could not load the Qt platform plugin "xcb"` mean the system Qt libraries are missing. On Debian/Ubuntu run `sudo apt install libxcb-cursor0 libxkbcommon-x11-0`.
-- **macOS Gatekeeper prompts** can appear the first time you launch a Qt application downloaded from the internet. Use System Settings → Privacy & Security to allow the app to run.
-- **Blank window on macOS** usually indicates the Python process is running under Rosetta without the matching Qt binaries. Reinstall Python natively (ARM64 or x86_64) and reinstall the requirements.
+Choose **Custom Palette** in the palette dropdown and click **Load Custom Palette…** to supply your own colours. The loader accepts:
 
-Once the window opens you can load an image with the toolbar button and start experimenting with the controls.
+- Image files – the unique colours from the pixels form the palette.
+- Text-based lists – one RGB value per line (`#RRGGBB`, `0xRRGGBB`, or `R G B`).
 
-## Performance notes
+## Tips for best results
 
-- Real-time previews are rendered against a down-scaled copy of the original image (with extra reductions for heavy diffusion algorithms) while full-resolution renders are dispatched on demand.
-- Preview requests are coalesced and cached so only the most recent slider changes trigger work, keeping feedback immediate.
-- All heavy lifting is handled with NumPy arrays for vectorised operations.
-- The processing pipeline runs on a tuned thread pool so the UI remains responsive, even for large source images.
+- Enable **Serpentine scan** when using error diffusion on photographs to reduce streaking.
+- Ordered modes (Bayer and Clustered Dot) benefit from slightly higher colour counts or adaptive palettes.
+- Use the denoise control sparingly; high settings can soften fine texture before dithering.
+- Turn on **Preserve brightness (linear)** for scenes with large gradients—quantisation will happen in linear RGB and convert back to sRGB for display.
 
-## Presets
+## Troubleshooting
 
-Preset files are stored as JSON documents. By default they live inside `~/.dither_studio/presets`. Use the toolbar buttons to save or load your favourite configurations.
+- If the window does not appear on Linux, ensure the Qt platform plugins are installed (e.g. `sudo apt install libxcb-cursor0 libxkbcommon-x11-0`).
+- macOS may require granting execution permission the first time you launch a Qt app downloaded from the internet.
+- When running inside a virtual environment, verify that the shell uses the environment’s Python before launching `python -m app`.
+
+## License
+
+This project is provided as-is without warranty. Use it as a reference or starting point for your own creative tools.
