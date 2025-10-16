@@ -11,7 +11,10 @@ try:  # pragma: no cover - OpenCV is optional at runtime
 except Exception:  # pragma: no cover - handled via graceful fallbacks
     cv2 = None  # type: ignore[assignment]
 
-import imageio.v3 as imageio
+try:  # pragma: no cover - imageio is optional when loading palette images
+    import imageio.v3 as imageio  # type: ignore
+except Exception:  # pragma: no cover - handled via Pillow fallback
+    imageio = None  # type: ignore[assignment]
 import numpy as np
 from PIL import Image, ImageFilter
 
@@ -140,8 +143,7 @@ class ImageProcessor:
 
         suffix = path.suffix.lower()
         if suffix in {".png", ".jpg", ".jpeg", ".bmp", ".gif"}:
-            data = imageio.imread(path)
-            data = np.asarray(data)
+            data = _load_palette_image(path)
             if data.ndim == 3 and data.shape[-1] >= 3:
                 base = data[..., :3]
             else:
@@ -459,6 +461,28 @@ def _denoise_image(data: np.ndarray, strength: float) -> np.ndarray:
             pass
     # As a conservative fallback, reuse a small Gaussian blur to reduce noise.
     return _gaussian_blur(data, radius=max(0.1, strength * 0.5))
+
+
+def _load_palette_image(path: Path) -> np.ndarray:
+    """Read a palette image using imageio when available, else Pillow.
+
+    Some users run the tool without installing ``imageio``.  Instead of
+    crashing on import we defer to Pillow's loader, which is sufficient for
+    palette extraction.  The helper always returns an ``uint8`` RGB array.
+    """
+
+    if imageio is not None:
+        try:
+            data = imageio.imread(path)
+            return np.asarray(data)
+        except Exception:
+            # Fall back to Pillow if imageio fails to decode the file.
+            pass
+
+    with Image.open(path) as img:
+        converted = img.convert("RGB") if img.mode not in {"RGB", "RGBA"} else img
+        data = np.asarray(converted, dtype=np.uint8)
+    return data
 
 
 __all__ = [
