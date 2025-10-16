@@ -277,6 +277,69 @@
         </div>
       </section>
       <section
+        class="panel window panel-insights"
+        aria-labelledby="panelInsightsTitle"
+        data-window-id="insights"
+        data-window-title="Budget Insights"
+        data-width="360"
+        data-height="420"
+        data-min-width="320"
+        data-min-height="320"
+        data-x="640"
+        data-y="24"
+      >
+        <header class="window-header" data-drag-handle>
+          <h2 class="window-title" id="panelInsightsTitle">Budget Insights</h2>
+          <div class="window-controls">
+            <button
+              class="window-control"
+              data-window-action="minimize"
+              type="button"
+              title="Minimize window"
+              aria-label="Minimize window"
+            >
+              <span class="window-control__icon" aria-hidden="true">–</span>
+              <span class="visually-hidden">Minimize Budget Insights window</span>
+            </button>
+            <button
+              class="window-control"
+              data-window-action="maximize"
+              type="button"
+              title="Maximize window"
+              aria-label="Maximize window"
+            >
+              <span class="window-control__icon" aria-hidden="true">▢</span>
+              <span class="visually-hidden">Maximize Budget Insights window</span>
+            </button>
+            <button
+              class="window-control"
+              data-window-action="close"
+              type="button"
+              title="Close window"
+              aria-label="Close window"
+            >
+              <span class="window-control__icon" aria-hidden="true">✕</span>
+              <span class="visually-hidden">Close Budget Insights window</span>
+            </button>
+          </div>
+        </header>
+        <div class="window-body">
+          <p class="insights-lead">
+            Live highlights keep you aligned with your goals. Adjust numbers to refresh these callouts instantly.
+          </p>
+          <ul class="insights-list" id="insightsList" aria-live="polite"></ul>
+          <div class="insights-actions">
+            <button class="btn-secondary" type="button" id="resetBlueprint">
+              Reset to starter blueprint
+            </button>
+            <label class="insights-toggle">
+              <input type="checkbox" id="autoThemeToggle" />
+              <span>Auto-cycle themes</span>
+            </label>
+          </div>
+        </div>
+      </section>
+      <section
         class="panel window panel-final hidden-window"
         aria-labelledby="panelFinalTitle"
         data-window-id="final"
@@ -444,6 +507,9 @@
           </button>
           <button class="start-menu__item" data-activate-screensaver>
             🌀 Launch 3D Pipes Screensaver
+          </button>
+          <button class="start-menu__item" data-reset-budget>
+            ♻️ Reset to Starter Blueprint
           </button>
         </div>
         <div class="start-menu__group">

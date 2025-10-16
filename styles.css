@@ -755,6 +755,64 @@ select:focus {
   gap: 12px;
 }
 
+.panel-insights .window-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.insights-lead {
+  margin: 0;
+  color: var(--muted-text);
+  line-height: 1.6;
+}
+
+.insights-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.insights-list li {
+  background: var(--snapshot-bg);
+  border-left: 4px solid var(--chip-active);
+  border-radius: 6px;
+  padding: 12px 14px;
+  font-size: 14px;
+  line-height: 1.5;
+  box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.6), inset -1px -1px 0 rgba(0, 0, 0, 0.08);
+}
+
+.insights-list .insights-empty {
+  border-left-color: var(--muted-text);
+  font-style: italic;
+}
+
+.insights-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.insights-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--body-text);
+}
+
+.insights-toggle input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--chip-active);
+}
+
 .final-copy {
   margin-bottom: 12px;
   color: var(--muted-text);

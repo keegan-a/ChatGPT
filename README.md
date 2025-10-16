@@ -71,6 +71,8 @@ Serving HTTP on :: port 8000 (http://[::]:8000/) ...
 ```
 Keep this terminal window open while you use the app.
 
+> **Fresh assets every time:** When you serve the project from `localhost`, any previously cached service workers are automatically cleared so you always load the latest layout.
+
 ---
 
 ## 5. View the app in your browser
@@ -84,6 +86,8 @@ You now have access to:
 - Per-category cadence settings (daily, weekly, or monthly) with automatic conversions.
 - Future value forecasts across multiple timeframes.
 - Scope toggles for daily, weekly, monthly, and yearly views.
+- The Budget Insights window with live callouts, autosave controls, and quick resets.
+- Auto theme cycling and keyboard shortcuts (`Ctrl` + `←`/`→`, `Ctrl` + `Shift` + `F`) for rapid navigation.
 
 ---
 
@@ -94,6 +98,14 @@ You now have access to:
 - Try the **Classic Snake** Easter egg from the Start menu. Use the arrow keys to guide the snake once the Snake window is focused.
 - If you close a panel accidentally, re-open it from the Start menu’s **Windows** section.
 - On large screens you can drag window title bars or use the resize grips in the lower-right corner for a full retro desktop feel.
+- The **Budget Insights** panel surfaces top categories, savings rate, and suggestions. Use its reset button to jump back to the starter blueprint or toggle automatic theme cycling.
+
+### Keyboard shortcuts & automation
+
+- `Ctrl` + `←`/`→` cycles through the daily, weekly, monthly, and yearly scopes.
+- `Ctrl` + `Shift` + `F` opens the Final Budget Showcase on demand.
+- Toggle **Auto-cycle themes** in the Budget Insights window to rotate aesthetics every 45 seconds.
+- Budgets now autosave locally—returning to the app restores your last plan unless you reset it.
 
 ---
 

@@ -24,6 +24,9 @@ const finalOpenTriggers = document.querySelectorAll('[data-open-final]');
 const screensaverOverlay = document.querySelector('#screensaver');
 const pipesCanvas = document.querySelector('#pipesCanvas');
 const themeMeta = document.querySelector('meta[name="theme-color"]');
+const insightsList = document.querySelector('#insightsList');
+const resetBlueprintButton = document.querySelector('#resetBlueprint');
+const autoThemeToggle = document.querySelector('#autoThemeToggle');
 const body = document.body;
 
 const scopeFactors = {
@@ -64,6 +67,9 @@ const themeTaglines = {
 const entryFrequencies = ['daily', 'weekly', 'monthly'];
 
 const scopeOrder = ['daily', 'weekly', 'monthly', 'yearly'];
+const STORAGE_KEY = 'budget-builder-95-state-v3';
+
+const themeSequence = ['win95', 'xp', 'vista', 'mac'];
 
 const futureHorizons = [
   { label: '1 Month', weeks: 4.345 },
@@ -72,6 +78,158 @@ const futureHorizons = [
   { label: '2 Years', weeks: 104 },
   { label: '5 Years', weeks: 260 },
 ];
+
+function sanitizeScope(scope) {
+  return scopeOrder.includes(scope) ? scope : 'daily';
+}
+
+function sanitizeFrequency(frequency) {
+  return entryFrequencies.includes(frequency) ? frequency : 'weekly';
+}
+
+function normalizePersistedCategory(category, fallbackId) {
+  if (!category || typeof category !== 'object') {
+    return null;
+  }
+  const id = typeof category.id === 'string' && category.id.trim() ? category.id : `restore-${fallbackId}`;
+  const name = typeof category.name === 'string' && category.name.trim() ? category.name.trim() : `Category ${fallbackId + 1}`;
+  const blueprint = recommendedBlueprint.find((item) => item.name === name);
+  const recommended = blueprint ? true : Boolean(category.recommended);
+  const percent = Number.isFinite(category.percent)
+    ? category.percent
+    : blueprint
+    ? blueprint.percent
+    : recommended
+    ? 0
+    : undefined;
+  const entryFrequency = sanitizeFrequency(category.entryFrequency);
+  const entryAmount = Number.isFinite(category.entryAmount)
+    ? category.entryAmount
+    : Number.isFinite(category.weeklyAmount)
+    ? convertFromWeekly(category.weeklyAmount, entryFrequency)
+    : 0;
+  const weeklyAmount = Number.isFinite(category.weeklyAmount)
+    ? category.weeklyAmount
+    : convertToWeekly(entryAmount, entryFrequency);
+  return {
+    id,
+    name,
+    percent,
+    weeklyAmount,
+    entryFrequency,
+    entryAmount,
+    notes: typeof category.notes === 'string' ? category.notes : '',
+    recommended,
+    customized: Boolean(category.customized),
+  };
+}
+
+function loadPersistedState() {
+  if (!('localStorage' in window)) {
+    return null;
+  }
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') {
+      return null;
+    }
+    const categories = Array.isArray(parsed.categories)
+      ? parsed.categories
+          .map((category, index) => normalizePersistedCategory(category, index))
+          .filter(Boolean)
+      : [];
+    return {
+      weeklyIncome: Number.isFinite(parsed.weeklyIncome) ? parsed.weeklyIncome : undefined,
+      scope: sanitizeScope(parsed.scope),
+      theme: themeClassMap[parsed.theme] ? parsed.theme : undefined,
+      autoThemeCycle: Boolean(parsed.autoThemeCycle),
+      categories,
+    };
+  } catch (error) {
+    console.warn('Unable to load saved budget state:', error);
+    return null;
+  }
+}
+
+function persistState() {
+  if (!('localStorage' in window)) {
+    return;
+  }
+  try {
+    const payload = {
+      weeklyIncome: state.weeklyIncome,
+      scope: state.scope,
+      theme: state.theme,
+      autoThemeCycle: state.autoThemeCycle,
+      categories: state.categories.map((category) => ({
+        id: category.id,
+        name: category.name,
+        percent: category.percent,
+        weeklyAmount: category.weeklyAmount,
+        entryFrequency: category.entryFrequency,
+        entryAmount: category.entryAmount,
+        notes: category.notes,
+        recommended: category.recommended,
+        customized: category.customized,
+      })),
+    };
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  } catch (error) {
+    console.warn('Unable to save budget state:', error);
+  }
+}
+
+function scheduleStateSave() {
+  if (stateSaveTimer) {
+    window.clearTimeout(stateSaveTimer);
+  }
+  stateSaveTimer = window.setTimeout(() => {
+    stateSaveTimer = null;
+    persistState();
+  }, 350);
+}
+
+function getNextTheme(current) {
+  const index = themeSequence.indexOf(current);
+  if (index === -1) {
+    return themeSequence[0];
+  }
+  return themeSequence[(index + 1) % themeSequence.length];
+}
+
+function startThemeCycle() {
+  if (themeCycleTimer) {
+    return;
+  }
+  themeCycleTimer = window.setInterval(() => {
+    const next = getNextTheme(state.theme);
+    applyTheme(next);
+  }, 45000);
+}
+
+function stopThemeCycle() {
+  if (!themeCycleTimer) {
+    return;
+  }
+  window.clearInterval(themeCycleTimer);
+  themeCycleTimer = null;
+}
+
+function syncAutoThemeToggle() {
+  if (!autoThemeToggle) {
+    return;
+  }
+  autoThemeToggle.checked = Boolean(state.autoThemeCycle);
+  if (state.autoThemeCycle) {
+    startThemeCycle();
+  } else {
+    stopThemeCycle();
+  }
+}
 
 const SCREENSAVER_INACTIVITY_MS = 120000;
 const PIPE_SEGMENT_LENGTH = 0.18;
@@ -143,6 +301,7 @@ let state = {
   weeklyIncome: 1200,
   categories: [],
   theme: 'win95',
+  autoThemeCycle: false,
 };
 
 const WINDOW_MODE_BREAKPOINT = 860;
@@ -152,6 +311,8 @@ let windowModeActive = false;
 const windowRegistry = new Map();
 let activeWindowId = null;
 let taskbarClockTimer = null;
+let themeCycleTimer = null;
+let stateSaveTimer = null;
 
 const snakeGame = {
   ctx: null,
@@ -184,10 +345,9 @@ const screensaverState = {
   lightDirection: { x: 0.35, y: 0.55, z: 0.72 },
 };
 
-function init() {
-  weeklyIncomeInput.value = state.weeklyIncome.toFixed(2);
-  state.categories = recommendedBlueprint.map((item, index) => {
-    const weeklyAmount = state.weeklyIncome * item.percent;
+function createRecommendedCategories(weeklyIncome) {
+  return recommendedBlueprint.map((item, index) => {
+    const weeklyAmount = weeklyIncome * item.percent;
     return {
       id: `rec-${index}`,
       ...item,
@@ -198,12 +358,94 @@ function init() {
       customized: false,
     };
   });
+}
+
+function buildInitialCategories(weeklyIncome, persistedCategories) {
+  const defaults = createRecommendedCategories(weeklyIncome);
+  if (!Array.isArray(persistedCategories) || !persistedCategories.length) {
+    return defaults;
+  }
+
+  const merged = defaults.map((category) => {
+    const saved = persistedCategories.find(
+      (item) => item.recommended && item.name === category.name
+    );
+    if (!saved) {
+      return category;
+    }
+    const frequency = sanitizeFrequency(saved.entryFrequency);
+    const entryAmount = Number.isFinite(saved.entryAmount)
+      ? saved.entryAmount
+      : convertFromWeekly(saved.weeklyAmount, frequency);
+    const weeklyAmount = Number.isFinite(saved.weeklyAmount)
+      ? saved.weeklyAmount
+      : convertToWeekly(entryAmount, frequency);
+    return {
+      ...category,
+      weeklyAmount,
+      entryFrequency: frequency,
+      entryAmount,
+      notes: typeof saved.notes === 'string' ? saved.notes : '',
+      customized: Boolean(saved.customized),
+    };
+  });
+
+  const customCategories = persistedCategories
+    .filter((item) => !item.recommended && typeof item.name === 'string' && item.name.trim())
+    .map((item, index) => {
+      const frequency = sanitizeFrequency(item.entryFrequency);
+      const entryAmount = Number.isFinite(item.entryAmount)
+        ? item.entryAmount
+        : convertFromWeekly(item.weeklyAmount, frequency);
+      const weeklyAmount = Number.isFinite(item.weeklyAmount)
+        ? item.weeklyAmount
+        : convertToWeekly(entryAmount, frequency);
+      const id = typeof item.id === 'string' && item.id.trim() ? item.id : `restore-custom-${index}`;
+      return {
+        id,
+        name: item.name.trim(),
+        percent: Number.isFinite(item.percent) ? item.percent : undefined,
+        weeklyAmount,
+        entryFrequency: frequency,
+        entryAmount,
+        notes: typeof item.notes === 'string' ? item.notes : '',
+        recommended: false,
+        customized: item.customized !== false,
+      };
+    });
+
+  return merged.concat(customCategories);
+}
+
+function init() {
+  const persisted = loadPersistedState();
+  if (persisted) {
+    if (Number.isFinite(persisted.weeklyIncome)) {
+      state.weeklyIncome = persisted.weeklyIncome;
+    }
+    if (persisted.scope) {
+      state.scope = sanitizeScope(persisted.scope);
+    }
+    if (persisted.theme) {
+      state.theme = persisted.theme;
+    }
+    state.autoThemeCycle = Boolean(persisted.autoThemeCycle);
+    state.categories = buildInitialCategories(state.weeklyIncome, persisted.categories);
+  } else {
+    state.categories = createRecommendedCategories(state.weeklyIncome);
+  }
+  if (weeklyIncomeInput) {
+    weeklyIncomeInput.value = state.weeklyIncome.toFixed(2);
+  }
+  setActiveScopeChip(state.scope);
   applyTheme(state.theme);
+  syncAutoThemeToggle();
   renderAll();
   initializeSnakeGame();
   initializeScreensaver();
   registerWindows();
   startTaskbarClock();
+  scheduleStateSave();
 }
 
 function formatCurrency(amount) {
@@ -290,6 +532,39 @@ function convertToWeekly(amount, scope) {
 function formatScopeLabel(scope) {
   if (!scope) return '';
   return scope.charAt(0).toUpperCase() + scope.slice(1);
+}
+
+function setActiveScopeChip(scope) {
+  if (!scopeChooser) {
+    return;
+  }
+  scopeChooser.querySelectorAll('.chip').forEach((chip) => {
+    chip.classList.toggle('active', chip.dataset.scope === scope);
+  });
+}
+
+function changeScope(newScope) {
+  const resolvedScope = sanitizeScope(newScope);
+  if (resolvedScope === state.scope) {
+    return;
+  }
+  setActiveScopeChip(resolvedScope);
+  state.scope = resolvedScope;
+  renderBudgetTable();
+  renderSummary();
+  renderFinalShowcase();
+  renderInsights();
+  scheduleStateSave();
+}
+
+function stepScope(delta) {
+  const currentIndex = scopeOrder.indexOf(state.scope);
+  if (currentIndex === -1) {
+    changeScope(scopeOrder[0]);
+    return;
+  }
+  const nextIndex = (currentIndex + delta + scopeOrder.length) % scopeOrder.length;
+  changeScope(scopeOrder[nextIndex]);
 }
 
 function formatFrequencyLabel(frequency) {
@@ -484,6 +759,99 @@ function renderFutureForecast() {
 
     card.append(title, incomeRow, expenseRow, netRow);
     futureGrid.appendChild(card);
+  });
+}
+
+function renderInsights() {
+  if (!insightsList) {
+    return;
+  }
+
+  insightsList.innerHTML = '';
+  if (!state.categories.length) {
+    const emptyItem = document.createElement('li');
+    emptyItem.className = 'insights-empty';
+    emptyItem.textContent = 'Add categories to unlock personalized insights.';
+    insightsList.appendChild(emptyItem);
+    return;
+  }
+
+  const totalExpensesWeekly = state.categories.reduce(
+    (sum, category) => sum + category.weeklyAmount,
+    0
+  );
+  const leftoverWeekly = state.weeklyIncome - totalExpensesWeekly;
+  const savingsRate = state.weeklyIncome === 0 ? 0 : leftoverWeekly / state.weeklyIncome;
+  const scopeLabel = formatScopeLabel(state.scope);
+  const largestCategory = state.categories.reduce((winner, category) => {
+    if (!winner || category.weeklyAmount > winner.weeklyAmount) {
+      return category;
+    }
+    return winner;
+  }, null);
+  const largestShare =
+    state.weeklyIncome > 0 && largestCategory
+      ? (largestCategory.weeklyAmount / state.weeklyIncome) * 100
+      : 0;
+
+  const blueprintPercents = new Map(
+    recommendedBlueprint.map((item) => [item.name, item.percent])
+  );
+  const recommendedDeltas = state.categories
+    .filter((category) => category.recommended && blueprintPercents.has(category.name))
+    .map((category) => {
+      const target = state.weeklyIncome * blueprintPercents.get(category.name);
+      return {
+        name: category.name,
+        delta: category.weeklyAmount - target,
+      };
+    });
+
+  const largestDelta = recommendedDeltas.reduce(
+    (winner, entry) => {
+      if (!winner) return entry;
+      return Math.abs(entry.delta) > Math.abs(winner.delta) ? entry : winner;
+    },
+    null
+  );
+
+  const customCount = state.categories.filter((category) => !category.recommended).length;
+
+  const insights = [];
+  if (largestCategory) {
+    insights.push(
+      `${largestCategory.name} is your biggest plan at ${largestShare.toFixed(1)}% of weekly income.`
+    );
+  }
+
+  insights.push(
+    leftoverWeekly >= 0
+      ? `You're freeing up ${formatCurrency(leftoverWeekly)} each week — stash it for future goals!`
+      : `You're overspending by ${formatCurrency(Math.abs(leftoverWeekly))} per week. Consider trimming a category.`
+  );
+
+  insights.push(`Savings rate: ${(savingsRate * 100).toFixed(1)}% in the ${scopeLabel} view.`);
+
+  if (largestDelta && Math.abs(largestDelta.delta) > 1) {
+    insights.push(
+      `${largestDelta.name} is ${largestDelta.delta > 0 ? 'over' : 'under'} its starter target by ${formatCurrency(Math.abs(largestDelta.delta))} each week.`
+    );
+  }
+
+  if (customCount > 0) {
+    insights.push(
+      `You've added ${customCount} custom ${customCount === 1 ? 'category' : 'categories'} to personalize the plan.`
+    );
+  } else {
+    insights.push('Try adding a custom category to capture unique spending or saving goals.');
+  }
+
+  insights.push(`Theme vibe: ${getThemeDisplayName(state.theme)} — ${getThemeTagline(state.theme)}`);
+
+  insights.forEach((entry) => {
+    const item = document.createElement('li');
+    item.textContent = entry;
+    insightsList.appendChild(item);
   });
 }
 
@@ -695,6 +1063,8 @@ function renderAll() {
   renderSummary();
   renderFutureForecast();
   renderFinalShowcase();
+  renderInsights();
+  scheduleStateSave();
 }
 
 function getCSSVar(name) {
@@ -715,6 +1085,8 @@ function applyTheme(theme) {
   }
   drawSnakeFrame();
   renderFinalShowcase();
+  renderInsights();
+  scheduleStateSave();
 }
 
 function updateTaskbarActiveState(activeId) {
@@ -1919,6 +2291,8 @@ function updateCategoryEntryAmount(id, entryAmount) {
   renderSummary();
   renderFutureForecast();
   renderFinalShowcase();
+  renderInsights();
+  scheduleStateSave();
   return updatedCategory;
 }
 
@@ -1941,6 +2315,8 @@ function updateCategoryFrequency(id, frequency) {
   renderSummary();
   renderFutureForecast();
   renderFinalShowcase();
+  renderInsights();
+  scheduleStateSave();
   return updatedCategory;
 }
 
@@ -1949,6 +2325,8 @@ function updateCategoryNotes(id, notes) {
     category.id === id ? { ...category, notes } : category
   );
   renderFinalShowcase();
+  renderInsights();
+  scheduleStateSave();
 }
 
 function addCustomCategory(name, amount, frequency, notes) {
@@ -1966,6 +2344,11 @@ function addCustomCategory(name, amount, frequency, notes) {
     recommended: false,
     customized: true,
   });
+  renderAll();
+}
+
+function resetToStarterBlueprint() {
+  state.categories = createRecommendedCategories(state.weeklyIncome);
   renderAll();
 }
 
@@ -1997,15 +2380,7 @@ scopeChooser.addEventListener('click', (event) => {
   if (!button) return;
 
   const newScope = button.dataset.scope;
-  if (newScope === state.scope) return;
-
-  scopeChooser.querySelectorAll('.chip').forEach((chip) =>
-    chip.classList.toggle('active', chip.dataset.scope === newScope)
-  );
-  state.scope = newScope;
-  renderBudgetTable();
-  renderSummary();
-  renderFinalShowcase();
+  changeScope(newScope);
 });
 
 budgetBody.addEventListener('input', (event) => {
@@ -2078,19 +2453,44 @@ if (startMenu) {
     const windowId = button.dataset.openWindow;
     const theme = button.dataset.theme;
     const activateScreensaver = button.hasAttribute('data-activate-screensaver');
+    const resetBudget = button.hasAttribute('data-reset-budget');
     if (windowId) {
       openWindow(windowId);
       if (windowId === 'snake') {
         drawSnakeFrame();
       }
       closeStartMenu();
+    } else if (resetBudget) {
+      resetToStarterBlueprint();
+      closeStartMenu();
     } else if (theme) {
+      state.autoThemeCycle = false;
+      syncAutoThemeToggle();
       applyTheme(theme);
       closeStartMenu();
+      scheduleStateSave();
     } else if (activateScreensaver) {
       closeStartMenu();
       activateScreensaverMode();
     }
+  });
+}
+
+if (resetBlueprintButton) {
+  resetBlueprintButton.addEventListener('click', () => {
+    resetToStarterBlueprint();
+  });
+}
+
+if (autoThemeToggle) {
+  autoThemeToggle.addEventListener('change', (event) => {
+    state.autoThemeCycle = event.target.checked;
+    if (state.autoThemeCycle) {
+      startThemeCycle();
+    } else {
+      stopThemeCycle();
+    }
+    scheduleStateSave();
   });
 }
 
@@ -2124,6 +2524,22 @@ document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') {
     closeStartMenu();
   }
+
+  const usingCtrl = event.ctrlKey && !event.altKey;
+  if (usingCtrl && !event.metaKey) {
+    if (!event.shiftKey && event.key === 'ArrowLeft') {
+      event.preventDefault();
+      stepScope(-1);
+    } else if (!event.shiftKey && event.key === 'ArrowRight') {
+      event.preventDefault();
+      stepScope(1);
+    } else if (event.shiftKey && (event.key === 'F' || event.key === 'f')) {
+      event.preventDefault();
+      openWindow('final');
+      renderFinalShowcase();
+    }
+  }
+
   handleSnakeKeydown(event);
 });
 
@@ -2193,9 +2609,22 @@ initializeWindowSystem();
 window.addEventListener('resize', handleWindowResize);
 
 if ('serviceWorker' in navigator) {
+  const isLocalEnvironment =
+    location.protocol === 'file:' ||
+    location.hostname === 'localhost' ||
+    location.hostname === '127.0.0.1' ||
+    location.hostname.endsWith('.local');
+
   window.addEventListener('load', () => {
-    navigator.serviceWorker
-      .register('./sw.js')
-      .catch((error) => console.error('Service worker registration failed:', error));
+    if (isLocalEnvironment) {
+      navigator.serviceWorker
+        .getRegistrations()
+        .then((registrations) => registrations.forEach((registration) => registration.unregister()))
+        .catch((error) => console.warn('Service worker cleanup failed:', error));
+    } else {
+      navigator.serviceWorker
+        .register('./sw.js')
+        .catch((error) => console.error('Service worker registration failed:', error));
+    }
   });
 }
