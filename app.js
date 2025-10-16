@@ -18,6 +18,17 @@ const snakeStartBtn = document.querySelector('#snakeStart');
 const snakePauseBtn = document.querySelector('#snakePause');
 const snakeResetBtn = document.querySelector('#snakeReset');
 const snakeStatusEl = document.querySelector('#snakeStatus');
+const showcaseBody = document.querySelector('#finalShowcaseBody');
+const showcaseCategories = document.querySelector('#showcaseCategories');
+const showcaseMetrics = document.querySelector('#showcaseMetrics');
+const showcaseTotals = document.querySelector('#showcaseTotals');
+const showcaseScopeLabel = document.querySelector('#showcaseScopeLabel');
+const showcaseSummary = document.querySelector('#showcaseSummary');
+const showcaseLaunchBtn = document.querySelector('#launchShowcase');
+const showcasePrintBtn = document.querySelector('#showcasePrintButton');
+const screensaverOverlay = document.querySelector('#screensaver');
+const screensaverCanvas = document.querySelector('#screensaverCanvas');
+const screensaverExitBtn = document.querySelector('#screensaverExit');
 const body = document.body;
 
 const scopeFactors = {
@@ -34,6 +45,11 @@ const themeClassMap = {
 };
 
 const entryFrequencies = ['daily', 'weekly', 'monthly'];
+const cadenceLabels = {
+  daily: 'day',
+  weekly: 'week',
+  monthly: 'month',
+};
 
 const futureHorizons = [
   { label: '1 Month', weeks: 4.345 },
@@ -41,6 +57,13 @@ const futureHorizons = [
   { label: '1 Year', weeks: 52 },
   { label: '2 Years', weeks: 104 },
   { label: '5 Years', weeks: 260 },
+];
+
+const pipeDirections = [
+  { x: 1, y: 0 },
+  { x: -1, y: 0 },
+  { x: 0, y: 1 },
+  { x: 0, y: -1 },
 ];
 
 const recommendedBlueprint = [
@@ -110,6 +133,7 @@ let windowModeActive = false;
 const windowRegistry = new Map();
 let activeWindowId = null;
 let taskbarClockTimer = null;
+let lastScreensaverPointerMove = 0;
 
 const snakeGame = {
   ctx: null,
@@ -123,6 +147,16 @@ const snakeGame = {
   speed: 160,
   running: false,
   wasGameOver: false,
+};
+
+const screensaverState = {
+  ctx: null,
+  pipes: [],
+  animationId: null,
+  active: false,
+  lastTimestamp: 0,
+  hue: 180,
+  ignoreUntil: 0,
 };
 
 function init() {
@@ -142,6 +176,7 @@ function init() {
   applyTheme(state.theme);
   renderAll();
   initializeSnakeGame();
+  initializeScreensaver();
   registerWindows();
   startTaskbarClock();
 }
@@ -166,6 +201,15 @@ function convertToWeekly(amount, scope) {
 function formatScopeLabel(scope) {
   if (!scope) return '';
   return scope.charAt(0).toUpperCase() + scope.slice(1);
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
 
 function renderIncomeSnapshot() {
@@ -327,8 +371,299 @@ function renderFutureForecast() {
     netRow.innerHTML = `<span>Net</span><strong class="${netClass}">${formatCurrency(net)}</strong>`;
 
     card.append(title, incomeRow, expenseRow, netRow);
-  futureGrid.appendChild(card);
+    futureGrid.appendChild(card);
   });
+}
+
+function renderShowcase() {
+  if (!showcaseBody || !showcaseCategories || !showcaseMetrics || !showcaseTotals) {
+    return;
+  }
+
+  const totalExpensesWeekly = state.categories.reduce(
+    (sum, category) => sum + category.weeklyAmount,
+    0
+  );
+  const totalIncomeWeekly = state.weeklyIncome;
+  const leftoverWeekly = totalIncomeWeekly - totalExpensesWeekly;
+
+  const scopeLabel = formatScopeLabel(state.scope);
+  if (showcaseScopeLabel) {
+    showcaseScopeLabel.textContent = `${scopeLabel} focus • ${state.categories.length} categories`;
+  }
+
+  const incomeScoped = convertFromWeekly(totalIncomeWeekly, state.scope);
+  const expensesScoped = convertFromWeekly(totalExpensesWeekly, state.scope);
+  const leftoverScoped = convertFromWeekly(leftoverWeekly, state.scope);
+  const savingsRate = totalIncomeWeekly === 0 ? 0 : Math.max(0, leftoverWeekly) / totalIncomeWeekly;
+
+  showcaseTotals.innerHTML = `
+    <div class="showcase-total">
+      <span>Total Income (${scopeLabel})</span>
+      <strong>${formatCurrency(incomeScoped)}</strong>
+    </div>
+    <div class="showcase-total">
+      <span>Planned Spending (${scopeLabel})</span>
+      <strong>${formatCurrency(expensesScoped)}</strong>
+    </div>
+    <div class="showcase-total ${leftoverWeekly >= 0 ? 'is-positive' : 'is-negative'}">
+      <span>${leftoverWeekly >= 0 ? 'Available to Save' : 'Over Budget'}</span>
+      <strong>${formatCurrency(Math.abs(leftoverScoped))}</strong>
+    </div>
+  `;
+
+  const scopeBreakdowns = ['daily', 'weekly', 'monthly', 'yearly'];
+  showcaseMetrics.innerHTML = scopeBreakdowns
+    .map((scope) => {
+      const income = convertFromWeekly(totalIncomeWeekly, scope);
+      const expenses = convertFromWeekly(totalExpensesWeekly, scope);
+      const net = income - expenses;
+      const netClass = net >= 0 ? 'is-positive' : 'is-negative';
+      return `
+        <div class="showcase-metric">
+          <header>${formatScopeLabel(scope)}</header>
+          <div><span>Income</span><strong>${formatCurrency(income)}</strong></div>
+          <div><span>Spending</span><strong>${formatCurrency(expenses)}</strong></div>
+          <div class="${netClass}"><span>Net</span><strong>${formatCurrency(net)}</strong></div>
+        </div>
+      `;
+    })
+    .join('');
+
+  const sortedCategories = [...state.categories].sort(
+    (a, b) => b.weeklyAmount - a.weeklyAmount
+  );
+
+  if (!sortedCategories.length) {
+    showcaseCategories.innerHTML =
+      '<li class="showcase-empty">Add categories to build your showcase.</li>';
+  } else {
+    showcaseCategories.innerHTML = sortedCategories
+      .map((category, index) => {
+        const entryFrequency = entryFrequencies.includes(category.entryFrequency)
+          ? category.entryFrequency
+          : 'weekly';
+        const entryAmount = Number.isFinite(category.entryAmount)
+          ? category.entryAmount
+        : convertFromWeekly(category.weeklyAmount, entryFrequency);
+      const cadenceLabel = cadenceLabels[entryFrequency] || entryFrequency;
+      const scopedAmount = convertFromWeekly(category.weeklyAmount, state.scope);
+      const note = category.notes ? `<span class="showcase-category__note">${escapeHtml(category.notes)}</span>` : '';
+      const badge = category.recommended
+        ? '<span class="showcase-category__badge">Starter</span>'
+        : '';
+      return `
+        <li class="showcase-category">
+          <div class="showcase-category__rank">${String(index + 1).padStart(2, '0')}</div>
+          <div class="showcase-category__details">
+            <h4>${escapeHtml(category.name)} ${badge}</h4>
+            <p>
+              ${formatCurrency(entryAmount)} per ${cadenceLabel}
+              <span class="showcase-category__scoped">${scopeLabel}: ${formatCurrency(scopedAmount)}</span>
+            </p>
+            ${note}
+          </div>
+        </li>
+      `;
+      })
+      .join('');
+  }
+
+  showcaseBody.dataset.theme = state.theme;
+  showcaseBody.dataset.overBudget = leftoverWeekly < 0 ? 'true' : 'false';
+
+  const heroAccent = leftoverWeekly >= 0 ? 'on-track' : 'over-budget';
+  showcaseBody.dataset.heroAccent = heroAccent;
+
+  const heroSummary = `Savings runway at ${(savingsRate * 100).toFixed(1)}%`;
+  showcaseBody.dataset.heroSummary = heroSummary;
+  if (showcaseSummary) {
+    const statusLabel = leftoverWeekly >= 0 ? 'On Track' : 'Needs Attention';
+    showcaseSummary.innerHTML = `
+      <span class="showcase-summary__status">${statusLabel}</span>
+      <span class="showcase-summary__detail">${heroSummary}</span>
+    `;
+  }
+}
+
+function initializeScreensaver() {
+  if (!screensaverCanvas) return;
+  const ctx = screensaverCanvas.getContext('2d');
+  if (!ctx) return;
+  screensaverState.ctx = ctx;
+  resizeScreensaverCanvas();
+}
+
+function resizeScreensaverCanvas() {
+  if (!screensaverCanvas || !screensaverState.ctx) return;
+  const dpr = window.devicePixelRatio || 1;
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+  screensaverCanvas.width = Math.max(320, Math.floor(width * dpr));
+  screensaverCanvas.height = Math.max(240, Math.floor(height * dpr));
+  screensaverCanvas.style.width = `${width}px`;
+  screensaverCanvas.style.height = `${height}px`;
+  screensaverState.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function pickNextDirection(current) {
+  const choices = pipeDirections.filter(
+    (direction) => !(direction.x === -current.x && direction.y === -current.y)
+  );
+  return choices[Math.floor(Math.random() * choices.length)] || current;
+}
+
+function spawnPipe(width, height) {
+  const origin = {
+    x: Math.random() * width,
+    y: Math.random() * height,
+  };
+  const direction = pipeDirections[Math.floor(Math.random() * pipeDirections.length)];
+  const hue = (screensaverState.hue + Math.random() * 40) % 360;
+  const color = `hsl(${hue}, 70%, 55%)`;
+  const shadow = `hsl(${hue}, 80%, 25%)`;
+  const highlight = `hsl(${hue}, 90%, 80%)`;
+  return {
+    points: [origin],
+    direction,
+    thickness: 26 + Math.random() * 12,
+    segment: 90 + Math.random() * 40,
+    color,
+    shadow,
+    highlight,
+    elapsed: 0,
+  };
+}
+
+function updatePipes(delta, width, height) {
+  const pipes = screensaverState.pipes;
+  pipes.forEach((pipe) => {
+    pipe.elapsed += delta;
+    while (pipe.elapsed >= 80) {
+      pipe.elapsed -= 80;
+      const last = pipe.points[pipe.points.length - 1];
+      let direction = pipe.direction;
+      if (Math.random() < 0.4) {
+        direction = pickNextDirection(direction);
+      }
+      let next = {
+        x: last.x + direction.x * pipe.segment,
+        y: last.y + direction.y * pipe.segment,
+      };
+      const margin = 120;
+      if (next.x < margin || next.x > width - margin || next.y < margin || next.y > height - margin) {
+        direction = pickNextDirection({ x: -direction.x, y: -direction.y });
+        next = {
+          x: clamp(last.x + direction.x * pipe.segment, margin, width - margin),
+          y: clamp(last.y + direction.y * pipe.segment, margin, height - margin),
+        };
+      }
+      pipe.direction = direction;
+      pipe.points.push(next);
+      if (pipe.points.length > 18) {
+        pipe.points.shift();
+      }
+    }
+  });
+
+  if (pipes.length < 5 || Math.random() < 0.05) {
+    pipes.push(spawnPipe(width, height));
+  }
+  if (pipes.length > 8) {
+    pipes.splice(0, pipes.length - 8);
+  }
+}
+
+function drawScreensaverFrame(width, height) {
+  const ctx = screensaverState.ctx;
+  if (!ctx) return;
+  ctx.fillStyle = 'rgba(0, 0, 16, 0.22)';
+  ctx.fillRect(0, 0, width, height);
+  screensaverState.pipes.forEach((pipe) => {
+    if (pipe.points.length < 2) return;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    ctx.lineWidth = pipe.thickness;
+    ctx.strokeStyle = pipe.shadow;
+    ctx.beginPath();
+    ctx.moveTo(pipe.points[0].x, pipe.points[0].y);
+    for (let i = 1; i < pipe.points.length; i += 1) {
+      ctx.lineTo(pipe.points[i].x, pipe.points[i].y);
+    }
+    ctx.stroke();
+
+    ctx.lineWidth = pipe.thickness * 0.75;
+    ctx.strokeStyle = pipe.color;
+    ctx.stroke();
+
+    ctx.lineWidth = pipe.thickness * 0.32;
+    ctx.strokeStyle = pipe.highlight;
+    ctx.stroke();
+  });
+}
+
+function animateScreensaver(timestamp) {
+  if (!screensaverState.active) {
+    return;
+  }
+  if (!screensaverState.lastTimestamp) {
+    screensaverState.lastTimestamp = timestamp;
+  }
+  const delta = Math.min(120, timestamp - screensaverState.lastTimestamp);
+  screensaverState.lastTimestamp = timestamp;
+  const dpr = window.devicePixelRatio || 1;
+  const width = screensaverCanvas.width / dpr;
+  const height = screensaverCanvas.height / dpr;
+  updatePipes(delta, width, height);
+  drawScreensaverFrame(width, height);
+  screensaverState.hue = (screensaverState.hue + delta * 0.02) % 360;
+  screensaverState.animationId = window.requestAnimationFrame(animateScreensaver);
+}
+
+function startScreensaver() {
+  if (!screensaverOverlay) return;
+  if (!screensaverState.ctx) {
+    initializeScreensaver();
+  }
+  resizeScreensaverCanvas();
+  const dpr = window.devicePixelRatio || 1;
+  const width = screensaverCanvas.width / dpr;
+  const height = screensaverCanvas.height / dpr;
+  const ctx = screensaverState.ctx;
+  if (ctx) {
+    ctx.fillStyle = '#000018';
+    ctx.fillRect(0, 0, width, height);
+  }
+  screensaverState.pipes = [];
+  for (let i = 0; i < 4; i += 1) {
+    screensaverState.pipes.push(spawnPipe(width, height));
+  }
+  screensaverState.lastTimestamp = 0;
+  screensaverState.active = true;
+  screensaverState.ignoreUntil = performance.now() + 600;
+  screensaverOverlay.classList.add('active');
+  screensaverOverlay.setAttribute('aria-hidden', 'false');
+  screensaverState.animationId = window.requestAnimationFrame(animateScreensaver);
+}
+
+function stopScreensaver() {
+  if (!screensaverState.active) return;
+  screensaverState.active = false;
+  if (screensaverState.animationId) {
+    window.cancelAnimationFrame(screensaverState.animationId);
+    screensaverState.animationId = null;
+  }
+  if (screensaverOverlay) {
+    screensaverOverlay.classList.remove('active');
+    screensaverOverlay.setAttribute('aria-hidden', 'true');
+  }
+}
+
+function handleScreensaverInteraction() {
+  if (!screensaverState.active) return;
+  if (performance.now() < screensaverState.ignoreUntil) return;
+  stopScreensaver();
 }
 
 function renderAll() {
@@ -336,6 +671,7 @@ function renderAll() {
   renderBudgetTable();
   renderSummary();
   renderFutureForecast();
+  renderShowcase();
 }
 
 function getCSSVar(name) {
@@ -349,6 +685,14 @@ function applyTheme(theme) {
   if (!body) return;
   Object.values(themeClassMap).forEach((value) => body.classList.remove(value));
   body.classList.add(className);
+  if (showcaseBody) {
+    showcaseBody.dataset.theme = theme;
+  }
+  const themeMeta = document.querySelector('meta[name="theme-color"]');
+  if (themeMeta) {
+    const themeColor = getCSSVar('--titlebar-active-start') || '#0050ef';
+    themeMeta.setAttribute('content', themeColor);
+  }
   drawSnakeFrame();
 }
 
@@ -398,6 +742,37 @@ function updateStartMenuWindowList() {
   });
 }
 
+function syncWindowControls(panel) {
+  if (!panel) return;
+  const minimizeBtn = panel.querySelector('[data-window-action="minimize"]');
+  const maximizeBtn = panel.querySelector('[data-window-action="maximize"]');
+  const closeBtn = panel.querySelector('[data-window-action="close"]');
+  if (minimizeBtn) {
+    minimizeBtn.dataset.icon = 'minimize';
+    minimizeBtn.setAttribute('aria-label', 'Minimize window');
+    minimizeBtn.setAttribute('title', 'Minimize');
+  }
+  if (closeBtn) {
+    closeBtn.dataset.icon = 'close';
+    closeBtn.setAttribute('aria-label', 'Close window');
+    closeBtn.setAttribute('title', 'Close');
+  }
+  if (maximizeBtn) {
+    const isMaximized = panel.dataset.maximized === 'true';
+    const icon = isMaximized ? 'restore' : 'maximize';
+    const label = isMaximized ? 'Restore window' : 'Maximize window';
+    maximizeBtn.dataset.icon = icon;
+    maximizeBtn.setAttribute('aria-label', label);
+    maximizeBtn.setAttribute('title', label);
+  }
+}
+
+function syncAllWindowControls() {
+  windowRegistry.forEach((record) => {
+    syncWindowControls(record.element);
+  });
+}
+
 function registerWindows() {
   if (!appFrame) return;
   const panels = Array.from(appFrame.querySelectorAll('.panel.window'));
@@ -434,6 +809,7 @@ function registerWindows() {
     }
     record.maximized = panel.dataset.maximized === 'true';
     windowRegistry.set(id, record);
+    syncWindowControls(panel);
   });
   buildTaskbarButtons();
   updateStartMenuWindowList();
@@ -448,6 +824,7 @@ function openWindow(id) {
   if (record.taskbarButton) {
     record.taskbarButton.disabled = false;
   }
+  syncWindowControls(record.element);
   bringToFront(record.element);
   if (windowModeActive) {
     const frameRect = appFrame.getBoundingClientRect();
@@ -481,6 +858,7 @@ function minimizeWindow(id) {
   } else {
     updateTaskbarActiveState(activeWindowId);
   }
+  syncWindowControls(record.element);
   updateStartMenuWindowList();
 }
 
@@ -498,6 +876,7 @@ function closeWindow(id) {
   } else {
     updateTaskbarActiveState(activeWindowId);
   }
+  syncWindowControls(record.element);
   updateStartMenuWindowList();
 }
 
@@ -546,6 +925,7 @@ function toggleMaximizeWindow(id) {
     constrainPanelToFrame(record.element, frameRect);
   }
   bringToFront(record.element);
+  syncWindowControls(record.element);
 }
 
 function toggleWindowFromTaskbar(id) {
@@ -1035,6 +1415,7 @@ function initializeWindowSystem() {
     } else if (!panel.classList.contains('hidden-window')) {
       constrainPanelToFrame(panel, frameRect);
     }
+    syncWindowControls(panel);
   });
 
   if (registeredNewPanel) {
@@ -1048,9 +1429,11 @@ function handleWindowResize() {
   if (!appFrame) return;
   if (!shouldEnableWindowMode()) {
     windowModeActive = false;
+    resizeScreensaverCanvas();
     return;
   }
   initializeWindowSystem();
+  resizeScreensaverCanvas();
 }
 
 function updateCategoryEntryAmount(id, entryAmount) {
@@ -1075,6 +1458,7 @@ function updateCategoryEntryAmount(id, entryAmount) {
   });
   renderSummary();
   renderFutureForecast();
+  renderShowcase();
   return updatedCategory;
 }
 
@@ -1094,6 +1478,7 @@ function updateCategoryFrequency(id, frequency) {
     };
     return updatedCategory;
   });
+  renderShowcase();
   return updatedCategory;
 }
 
@@ -1101,6 +1486,7 @@ function updateCategoryNotes(id, notes) {
   state.categories = state.categories.map((category) =>
     category.id === id ? { ...category, notes } : category
   );
+  renderShowcase();
 }
 
 function addCustomCategory(name, amount, frequency, notes) {
@@ -1228,6 +1614,7 @@ if (startMenu) {
     if (!button) return;
     const windowId = button.dataset.openWindow;
     const theme = button.dataset.theme;
+    const action = button.dataset.action;
     if (windowId) {
       openWindow(windowId);
       if (windowId === 'snake') {
@@ -1236,6 +1623,9 @@ if (startMenu) {
       closeStartMenu();
     } else if (theme) {
       applyTheme(theme);
+      closeStartMenu();
+    } else if (action === 'screensaver') {
+      startScreensaver();
       closeStartMenu();
     }
   });
@@ -1252,6 +1642,10 @@ document.addEventListener('click', (event) => {
 });
 
 document.addEventListener('keydown', (event) => {
+  if (screensaverState.active) {
+    handleScreensaverInteraction();
+    return;
+  }
   if (event.key === 'Escape') {
     closeStartMenu();
   }
@@ -1296,6 +1690,65 @@ if (snakeResetBtn) {
   });
 }
 
+if (showcaseLaunchBtn) {
+  showcaseLaunchBtn.addEventListener('click', () => {
+    renderShowcase();
+    openWindow('showcase');
+  });
+}
+
+if (showcasePrintBtn) {
+  showcasePrintBtn.addEventListener('click', () => {
+    renderShowcase();
+    openWindow('showcase');
+    document.body.classList.add('print-mode');
+    window.setTimeout(() => {
+      window.print();
+    }, 60);
+  });
+}
+
+if (screensaverExitBtn) {
+  screensaverExitBtn.addEventListener('click', () => {
+    stopScreensaver();
+  });
+}
+
+if (screensaverOverlay) {
+  screensaverOverlay.addEventListener('click', (event) => {
+    if (event.target === screensaverOverlay) {
+      handleScreensaverInteraction();
+    }
+  });
+}
+
+document.addEventListener('pointerdown', handleScreensaverInteraction);
+document.addEventListener('pointermove', () => {
+  if (!screensaverState.active) return;
+  const now = performance.now();
+  if (now - lastScreensaverPointerMove < 160) {
+    return;
+  }
+  lastScreensaverPointerMove = now;
+  handleScreensaverInteraction();
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') {
+    stopScreensaver();
+  }
+});
+
+window.addEventListener('beforeprint', () => {
+  document.body.classList.add('print-mode');
+  renderShowcase();
+  openWindow('showcase');
+});
+
+window.addEventListener('afterprint', () => {
+  document.body.classList.remove('print-mode');
+});
+
 weeklyIncomeInput.addEventListener('input', (event) => {
   handleWeeklyIncomeChange(event.target.value);
 });
@@ -1318,6 +1771,16 @@ customForm.addEventListener('submit', (event) => {
     customFrequencySelect.value = 'weekly';
   }
 });
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker
+      .register('service-worker.js')
+      .catch((error) => {
+        console.warn('Service worker registration failed:', error);
+      });
+  });
+}
 
 init();
 initializeWindowSystem();

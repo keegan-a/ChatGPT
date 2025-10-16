@@ -93,10 +93,58 @@ You now have access to:
 - Try the **Classic Snake** Easter egg from the Start menu. Use the arrow keys to guide the snake once the Snake window is focused.
 - If you close a panel accidentally, re-open it from the Start menu’s **Windows** section.
 - On large screens you can drag window title bars or use the resize grips in the lower-right corner for a full retro desktop feel.
+- Use the **Final Budget Showcase** button in the Categories window (or Start → Tools → 📊 Final Budget Showcase) to open a themed summary with export controls.
+- Kick back with the **Activate Screensaver** option in Start → Tools to launch an animated 3D pipes homage. Move your mouse, tap, or press any key to return to work.
+- Theme switching also updates wallpaper, window chrome, the Start bar, and Snake so each mode feels era-correct.
 
 ---
 
-## 7. Stop the server and exit the environment
+## 7. Save or share your final budget
+- Open the Final Budget Showcase from the Categories window or Start → Tools.
+- Review the scope-by-scope metrics, category highlights, and hero banner.
+- Click **Save Showcase as PDF** to trigger your browser’s print dialog with a dedicated layout (only the showcase prints).
+- You can also use your browser’s regular Print/Save-as-PDF shortcut. The page automatically switches to a clean print mode.
+
+---
+
+## 8. Install it like an app (desktop & mobile)
+The project ships as a Progressive Web App (PWA) so you can “install” it with its retro icon.
+
+**Desktop (Chrome/Edge/Brave):**
+1. With the site open, look for the **Install** icon in the address bar (a monitor with a down arrow) and click it.
+2. Confirm the prompt. A standalone window with taskbar/dock icon will appear.
+3. Launch the app from your OS just like any other program.
+
+**macOS Safari:** open the Share menu → **Add to Dock**.
+
+**iOS & Android:**
+1. Open the site in Safari (iOS) or Chrome (Android).
+2. Use the Share menu → **Add to Home Screen** (iOS) or the overflow menu → **Install app** (Android).
+3. The icon `BB95` will appear on your home screen and launch full screen.
+
+The PWA works offline thanks to the bundled service worker, so the nostalgia desktop travels with you.
+
+---
+
+## 9. Package a desktop launcher (optional)
+If you prefer a classic executable, use the included `desktop_launcher.py` script:
+
+1. Activate your virtual environment (see Section 3).
+2. Install PyInstaller (only needed once):
+   ```bash
+   pip install pyinstaller
+   ```
+3. Build the executable:
+   ```bash
+   pyinstaller --noconfirm --onefile --windowed desktop_launcher.py
+   ```
+4. Launch the generated file in `dist/desktop_launcher` (Windows/macOS/Linux builds are produced for your platform).
+
+The launcher spins up a local server on an available port, opens the retro desktop in your default browser, and shuts down cleanly when you close it. You can also drop the generated executable onto a USB stick for an instant portable build.
+
+---
+
+## 10. Stop the server and exit the environment
 - To stop the server, return to the terminal running `python -m http.server` and press `Ctrl + C`.
 - To leave the virtual environment, type:
   ```bash
@@ -105,7 +153,7 @@ You now have access to:
 
 ---
 
-## 8. Customize or explore further
+## 11. Customize or explore further
 - Open `index.html`, `styles.css`, or `app.js` in your favorite code editor to tweak the layout, styling, or logic.
 - Refresh the browser page after saving your changes to see the updates.
 

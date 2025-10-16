@@ -4,6 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Nostalgia Budget Builder</title>
+    <meta name="theme-color" content="#0050ef" />
+    <link rel="icon" type="image/svg+xml" href="icons/budget-builder-icon.svg" />
+    <link rel="apple-touch-icon" href="icons/budget-builder-icon.svg" />
+    <link rel="manifest" href="manifest.webmanifest" />
     <link rel="stylesheet" href="styles.css" />
     <link
       rel="preconnect"
@@ -146,6 +150,11 @@
             </thead>
             <tbody id="budgetBody"></tbody>
           </table>
+          <div class="panel-actions">
+            <button class="primary" id="launchShowcase" type="button">
+              Launch Final Budget Showcase
+            </button>
+          </div>
           <form id="customCategoryForm" class="custom-form">
             <h3>Add custom category</h3>
             <div class="form-grid">
@@ -232,6 +241,63 @@
               as you tweak income and categories.
             </p>
             <div class="future-grid" id="futureGrid"></div>
+          </div>
+        </div>
+      </section>
+      <section
+        class="panel window panel-showcase hidden-window"
+        aria-labelledby="panelShowcaseTitle"
+        data-window-id="showcase"
+        data-window-title="Final Budget Showcase"
+        data-width="520"
+        data-height="580"
+        data-min-width="420"
+        data-min-height="420"
+        data-initial-state="closed"
+        data-x="120"
+        data-y="120"
+      >
+        <header class="window-header" data-drag-handle>
+          <h2 class="window-title" id="panelShowcaseTitle">Final Budget Showcase</h2>
+          <div class="window-controls" aria-hidden="true">
+            <button
+              class="window-control"
+              data-window-action="minimize"
+              type="button"
+              title="Minimize"
+              aria-label="Minimize window"
+            ></button>
+            <button
+              class="window-control"
+              data-window-action="maximize"
+              type="button"
+              title="Maximize"
+              aria-label="Maximize window"
+            ></button>
+            <button
+              class="window-control"
+              data-window-action="close"
+              type="button"
+              title="Close"
+              aria-label="Close window"
+            ></button>
+          </div>
+        </header>
+        <div class="window-body showcase-body" id="finalShowcaseBody">
+          <div class="showcase-hero">
+            <div class="showcase-title">Your Nostalgia Budget</div>
+            <div class="showcase-caption" id="showcaseScopeLabel"></div>
+            <div class="showcase-summary" id="showcaseSummary"></div>
+            <div class="showcase-totals" id="showcaseTotals"></div>
+          </div>
+          <div class="showcase-content">
+            <div class="showcase-metrics" id="showcaseMetrics"></div>
+            <ul class="showcase-categories" id="showcaseCategories"></ul>
+          </div>
+          <div class="showcase-actions">
+            <button class="primary" id="showcasePrintButton" type="button">
+              Save Showcase as PDF
+            </button>
           </div>
         </div>
       </section>
@@ -324,6 +390,15 @@
           <div class="start-menu__list" id="startWindowList"></div>
         </div>
         <div class="start-menu__group">
+          <h3>Tools</h3>
+          <button class="start-menu__item" data-open-window="showcase">
+            📊 Final Budget Showcase
+          </button>
+          <button class="start-menu__item" data-action="screensaver">
+            🪄 Activate Screensaver
+          </button>
+        </div>
+        <div class="start-menu__group">
           <h3>Games</h3>
           <button class="start-menu__item" data-open-window="snake">
             🐍 Classic Snake
@@ -354,6 +429,13 @@
       <div class="taskbar-buttons" id="taskbarButtons"></div>
       <div class="taskbar-spacer"></div>
       <div class="taskbar-clock" id="taskbarClock" aria-live="polite"></div>
+    </div>
+
+    <div class="screensaver" id="screensaver" aria-hidden="true">
+      <canvas id="screensaverCanvas" width="1280" height="720" aria-hidden="true"></canvas>
+      <button class="screensaver-exit" type="button" id="screensaverExit">
+        Exit Screensaver
+      </button>
     </div>
 
     <script src="app.js" type="module"></script>
