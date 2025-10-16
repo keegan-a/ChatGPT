@@ -235,7 +235,8 @@ class ImageProcessor:
         if mode == "Original Image Palette":
             image = Image.fromarray(np.clip(rgb * 255.0, 0, 255).astype(np.uint8), mode="RGB")
             quantised = image.convert("RGB").quantize(colors=count, method=Image.MEDIANCUT, dither=Image.NONE)
-            palette = np.unique(np.array(quantised.convert("RGB")), axis=0)
+            palette = np.array(quantised.convert("RGB"))
+            palette = np.unique(palette.reshape(-1, 3), axis=0)
         elif mode == "Grayscale":
             levels = np.linspace(0, 1, count)
             palette = np.stack([levels, levels, levels], axis=-1)
@@ -251,6 +252,7 @@ class ImageProcessor:
             palette = np.linspace(0, 1, count)
             palette = np.stack([palette, palette, palette], axis=-1)
 
+        palette = palette.reshape(-1, 3)
         if palette.shape[0] > count:
             palette = palette[:count]
         elif palette.shape[0] < count:
