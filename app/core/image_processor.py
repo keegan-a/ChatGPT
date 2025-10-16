@@ -9,7 +9,11 @@ import cv2
 import imageio.v3 as imageio
 import numpy as np
 from PIL import Image
-from skimage import exposure
+
+try:  # pragma: no cover - optional dependency that may not be present
+    from skimage import exposure  # type: ignore
+except Exception:  # pragma: no cover - handled via fallback implementation
+    exposure = None  # type: ignore[assignment]
 
 from .dithering import get_algorithm
 
@@ -209,7 +213,7 @@ class ImageProcessor:
             factor = 1.0 + settings.contrast
             data = np.clip((data - 0.5) * factor + 0.5, 0.0, 1.0)
         if settings.gamma and not np.isclose(settings.gamma, 1.0):
-            data = np.clip(exposure.adjust_gamma(data, settings.gamma), 0.0, 1.0)
+            data = np.clip(_adjust_gamma(data, settings.gamma), 0.0, 1.0)
         if settings.blur_radius > 0:
             sigma = max(1e-3, settings.blur_radius)
             data = cv2.GaussianBlur(data, ksize=(0, 0), sigmaX=sigma, sigmaY=sigma)
@@ -348,6 +352,15 @@ def _linear_to_srgb(rgb: np.ndarray) -> np.ndarray:
     result[below] = rgb[below] * 12.92
     result[~below] = 1.055 * np.power(rgb[~below], 1 / 2.4) - 0.055
     return np.clip(result, 0.0, 1.0)
+
+
+def _adjust_gamma(image: np.ndarray, gamma: float) -> np.ndarray:
+    """Apply gamma correction with an optional scikit-image fallback."""
+
+    if exposure is not None:
+        return exposure.adjust_gamma(image, gamma)
+    gamma = max(gamma, 1e-6)
+    return np.power(np.clip(image, 0.0, 1.0), gamma)
 
 
 __all__ = [
