@@ -81,12 +81,22 @@ Keep this terminal window open while you use the app.
 You now have access to:
 - Weekly income controls and Windows 95-inspired panels.
 - Editable starter categories plus custom category creation.
+- Per-category cadence settings (daily, weekly, or monthly) with automatic conversions.
 - Future value forecasts across multiple timeframes.
 - Scope toggles for daily, weekly, monthly, and yearly views.
 
 ---
 
-## 6. Stop the server and exit the environment
+## 6. Retro desktop tips
+- The **taskbar** keeps a button for every window. Click a button to bring its panel forward or to restore it if you minimized it.
+- Tap the green **Start** button to open the Start menu. From there you can re-open closed windows, switch between the Windows 95, Windows Vista, or 2000s Macintosh aesthetics, and launch the hidden game.
+- Try the **Classic Snake** Easter egg from the Start menu. Use the arrow keys to guide the snake once the Snake window is focused.
+- If you close a panel accidentally, re-open it from the Start menu’s **Windows** section.
+- On large screens you can drag window title bars or use the resize grips in the lower-right corner for a full retro desktop feel.
+
+---
+
+## 7. Stop the server and exit the environment
 - To stop the server, return to the terminal running `python -m http.server` and press `Ctrl + C`.
 - To leave the virtual environment, type:
   ```bash
@@ -95,7 +105,7 @@ You now have access to:
 
 ---
 
-## 7. Customize or explore further
+## 8. Customize or explore further
 - Open `index.html`, `styles.css`, or `app.js` in your favorite code editor to tweak the layout, styling, or logic.
 - Refresh the browser page after saving your changes to see the updates.
 
