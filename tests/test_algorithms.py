@@ -55,6 +55,7 @@ def test_custom_palette_loader(tmp_path: Path) -> None:
     text_palette.write_text("#ff0000\n0 255 0\n0x0000ff\n")
     palette = processor.load_palette_from_file(text_palette)
     assert palette.shape[0] == 3
+    assert palette.dtype == np.uint8
 
     # Image palette
     image = Image.new("RGB", (2, 2), color=(0, 0, 0))
@@ -63,8 +64,30 @@ def test_custom_palette_loader(tmp_path: Path) -> None:
     image.putpixel((0, 1), (0, 0, 255))
     palette_image_path = tmp_path / "palette.png"
     image.save(palette_image_path)
+    from app.core import image_processor as ip_mod
+
+    # Force the image loader fallback by disabling imageio temporarily
+    original_imageio = ip_mod.imageio
+    ip_mod.imageio = None
     palette_from_image = processor.load_palette_from_file(palette_image_path)
+    ip_mod.imageio = original_imageio
     assert palette_from_image.shape[0] >= 3
+    assert palette_from_image.dtype == np.uint8
+
+
+def test_adaptive_palette_respects_requested_size() -> None:
+    image = Image.new("RGB", (16, 16))
+    for y in range(16):
+        for x in range(16):
+            image.putpixel((x, y), (x * 16, y * 16, (x + y) * 8 % 256))
+
+    processor = ImageProcessor()
+    processor.set_image(image)
+    settings = DitheringSettings(color_count=6)
+    result = processor.render_preview(settings, max_size=None)
+    assert result.palette.shape == (6, 3)
+    assert result.palette.max() <= 255
+    assert result.palette.min() >= 0
 
 
 def test_serpentine_toggle_changes_output() -> None:

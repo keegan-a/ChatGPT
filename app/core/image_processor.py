@@ -3,12 +3,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Sequence, Tuple
+from typing import Iterable, List, Optional, Sequence, Tuple
 
-import cv2
-import imageio.v3 as imageio
+try:  # pragma: no cover - OpenCV is optional at runtime
+    import cv2  # type: ignore
+except Exception:  # pragma: no cover - gracefully degrade when unavailable
+    cv2 = None  # type: ignore[assignment]
+
+try:  # pragma: no cover - imageio is optional as well
+    import imageio.v3 as imageio  # type: ignore
+except Exception:  # pragma: no cover - fallback loader will be used
+    imageio = None  # type: ignore[assignment]
+
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageFilter
 
 try:  # pragma: no cover - optional dependency that may not be present
     from skimage import exposure  # type: ignore
@@ -112,42 +120,25 @@ class ImageProcessor:
     def set_custom_palette(self, palette: PaletteArray | None) -> None:
         if palette is None:
             self._custom_palette = None
-        else:
-            unique = np.unique(palette.reshape(-1, 3), axis=0)
-            self._custom_palette = unique.astype(np.uint8)
+            return
+
+        normalised = _normalise_palette(palette)
+        if normalised.size == 0:
+            raise ValueError("Palette must contain at least one colour")
+        self._custom_palette = normalised
 
     def load_palette_from_file(self, path: Path) -> PaletteArray:
         """Load palette colours from an image or text file."""
 
         suffix = path.suffix.lower()
         if suffix in {".png", ".jpg", ".jpeg", ".bmp", ".gif"}:
-            data = imageio.imread(path)
-            if data.ndim == 3 and data.shape[-1] >= 3:
-                colours = np.unique(data[..., :3].reshape(-1, 3), axis=0)
-            else:
-                colours = np.unique(np.stack([data] * 3, axis=-1).reshape(-1, 3), axis=0)
+            colours = _load_palette_from_image(path)
         else:
-            colours: List[Tuple[int, int, int]] = []
-            for line in path.read_text().splitlines():
-                line = line.strip()
-                if not line or line.startswith("#"):
-                    continue
-                if line.startswith("0x") or line.startswith("#"):
-                    token = line.lstrip("#")
-                    if len(token) == 6:
-                        colours.append(tuple(int(token[i : i + 2], 16) for i in range(0, 6, 2)))
-                else:
-                    parts = [p for p in line.replace(",", " ").split(" ") if p]
-                    if len(parts) >= 3:
-                        try:
-                            colours.append(tuple(int(float(p)) for p in parts[:3]))
-                        except ValueError:
-                            continue
-            if not colours:
-                raise ValueError("No colours parsed from palette file")
-            colours_np = np.array(colours, dtype=np.uint8)
-            colours = np.unique(colours_np, axis=0)
-        palette = colours.astype(np.uint8)
+            colours = _load_palette_from_text(path)
+
+        palette = _normalise_palette(colours)
+        if palette.size == 0:
+            raise ValueError("No colours parsed from palette file")
         self.set_custom_palette(palette)
         return palette
 
@@ -215,17 +206,11 @@ class ImageProcessor:
         if settings.gamma and not np.isclose(settings.gamma, 1.0):
             data = np.clip(_adjust_gamma(data, settings.gamma), 0.0, 1.0)
         if settings.blur_radius > 0:
-            sigma = max(1e-3, settings.blur_radius)
-            data = cv2.GaussianBlur(data, ksize=(0, 0), sigmaX=sigma, sigmaY=sigma)
+            data = _apply_blur(data, settings.blur_radius)
         if settings.sharpen_amount > 0:
-            sigma = 1.0
-            blurred = cv2.GaussianBlur(data, ksize=(0, 0), sigmaX=sigma, sigmaY=sigma)
-            data = cv2.addWeighted(data, 1.0 + settings.sharpen_amount, blurred, -settings.sharpen_amount, 0)
+            data = _apply_sharpen(data, settings.sharpen_amount)
         if settings.denoise_strength > 0:
-            temp = np.clip(data * 255.0, 0, 255).astype(np.uint8)
-            h = 5 + int(settings.denoise_strength * 10)
-            temp = cv2.fastNlMeansDenoisingColored(temp, None, h, h, 7, 21)
-            data = temp.astype(np.float32) / 255.0
+            data = _apply_denoise(data, settings.denoise_strength)
         return np.clip(data, 0.0, 1.0)
 
     # --------------------------------------------------------------- palette ---
@@ -233,10 +218,7 @@ class ImageProcessor:
         mode = settings.palette_mode
         count = max(2, settings.color_count)
         if mode == "Original Image Palette":
-            image = Image.fromarray(np.clip(rgb * 255.0, 0, 255).astype(np.uint8), mode="RGB")
-            quantised = image.convert("RGB").quantize(colors=count, method=Image.MEDIANCUT, dither=Image.NONE)
-            palette = np.array(quantised.convert("RGB"))
-            palette = np.unique(palette.reshape(-1, 3), axis=0)
+            palette = _adaptive_palette_from_image(rgb, count)
         elif mode == "Grayscale":
             levels = np.linspace(0, 1, count)
             palette = np.stack([levels, levels, levels], axis=-1)
@@ -253,12 +235,15 @@ class ImageProcessor:
             palette = np.stack([palette, palette, palette], axis=-1)
 
         palette = palette.reshape(-1, 3)
+        if palette.size == 0:
+            palette = np.linspace(0, 1, count)
+            palette = np.stack([palette, palette, palette], axis=-1)
         if palette.shape[0] > count:
             palette = palette[:count]
         elif palette.shape[0] < count:
             repeats = int(np.ceil(count / palette.shape[0]))
             palette = np.tile(palette, (repeats, 1))[:count]
-        return palette.astype(np.float32)
+        return np.clip(palette.astype(np.float32), 0.0, 1.0)
 
     # --------------------------------------------------------------- dithering --
     def _apply_dither(self, rgb: np.ndarray, palette: np.ndarray, settings: DitheringSettings) -> np.ndarray:
@@ -336,6 +321,130 @@ def _nearest_palette_indices(pixels: np.ndarray, palette: np.ndarray) -> np.ndar
     diff = pixels[:, None, :] - palette[None, :, :]
     distances = np.sum(diff * diff, axis=2)
     return np.argmin(distances, axis=1)
+
+
+def _normalise_palette(palette: Iterable[Iterable[int]] | np.ndarray) -> np.ndarray:
+    array = np.asarray(list(palette) if not isinstance(palette, np.ndarray) else palette)
+    if array.size == 0:
+        return np.empty((0, 3), dtype=np.uint8)
+
+    array = np.reshape(array, (-1, array.shape[-1]))
+    if array.shape[1] not in {3, 4}:
+        raise ValueError("Palette entries must have 3 or 4 components")
+    if array.shape[1] == 4:
+        array = array[:, :3]
+
+    array = np.clip(array, 0, 255).astype(np.uint8)
+    return np.unique(array, axis=0)
+
+
+def _load_palette_from_image(path: Path) -> np.ndarray:
+    if imageio is not None:
+        data = imageio.imread(path)
+        if data.ndim == 2:
+            data = np.stack([data] * 3, axis=-1)
+        elif data.shape[-1] >= 3:
+            data = data[..., :3]
+        else:
+            data = np.stack([data[..., 0]] * 3, axis=-1)
+        return data.reshape(-1, 3)
+
+    with Image.open(path) as img:
+        rgb = img.convert("RGB")
+        return np.array(rgb).reshape(-1, 3)
+
+
+def _load_palette_from_text(path: Path) -> List[Tuple[int, int, int]]:
+    colours: List[Tuple[int, int, int]] = []
+    for raw in path.read_text().splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+
+        if line.startswith("#") and len(line) > 1:
+            token = line.lstrip("#")
+            if len(token) == 6 and all(c in "0123456789abcdefABCDEF" for c in token):
+                colours.append(tuple(int(token[i : i + 2], 16) for i in range(0, 6, 2)))
+                continue
+        if line.lower().startswith("0x") and len(line) >= 8:
+            token = line[2:8]
+            if all(c in "0123456789abcdefABCDEF" for c in token):
+                colours.append(tuple(int(token[i : i + 2], 16) for i in range(0, 6, 2)))
+                continue
+
+        parts = [p for p in line.replace(",", " ").split() if p]
+        if len(parts) >= 3:
+            try:
+                colours.append(tuple(int(float(p)) for p in parts[:3]))
+            except ValueError:
+                continue
+    return colours
+
+
+def _apply_blur(data: np.ndarray, radius: float) -> np.ndarray:
+    radius = max(radius, 0.0)
+    if radius <= 0.0:
+        return data
+    if cv2 is not None:
+        sigma = max(1e-3, radius)
+        return cv2.GaussianBlur(data, ksize=(0, 0), sigmaX=sigma, sigmaY=sigma)
+
+    image = Image.fromarray(np.clip(data * 255.0, 0, 255).astype(np.uint8))
+    blurred = image.filter(ImageFilter.GaussianBlur(radius))
+    return np.array(blurred).astype(np.float32) / 255.0
+
+
+def _apply_sharpen(data: np.ndarray, amount: float) -> np.ndarray:
+    amount = max(amount, 0.0)
+    if amount <= 0.0:
+        return data
+    if cv2 is not None:
+        sigma = 1.0
+        blurred = cv2.GaussianBlur(data, ksize=(0, 0), sigmaX=sigma, sigmaY=sigma)
+        return cv2.addWeighted(data, 1.0 + amount, blurred, -amount, 0)
+
+    image = Image.fromarray(np.clip(data * 255.0, 0, 255).astype(np.uint8))
+    # Pillow's UnsharpMask gives a decent approximation of configurable sharpening
+    try:
+        filter_ = ImageFilter.UnsharpMask(radius=2, percent=int(amount * 200), threshold=3)
+    except AttributeError:  # pragma: no cover - very old Pillow builds
+        filter_ = ImageFilter.SHARPEN
+    sharpened = image.filter(filter_)
+    return np.array(sharpened).astype(np.float32) / 255.0
+
+
+def _apply_denoise(data: np.ndarray, strength: float) -> np.ndarray:
+    strength = max(strength, 0.0)
+    if strength <= 0.0:
+        return data
+    if cv2 is not None:
+        temp = np.clip(data * 255.0, 0, 255).astype(np.uint8)
+        h = 5 + int(strength * 10)
+        temp = cv2.fastNlMeansDenoisingColored(temp, None, h, h, 7, 21)
+        return temp.astype(np.float32) / 255.0
+    # When OpenCV is unavailable, quietly skip denoising rather than failing.
+    return data
+
+
+def _adaptive_palette_from_image(rgb: np.ndarray, count: int) -> np.ndarray:
+    image = Image.fromarray(np.clip(rgb * 255.0, 0, 255).astype(np.uint8), mode="RGB")
+    quantised = image.quantize(colors=count, method=Image.MEDIANCUT, dither=Image.NONE)
+    palette_data = quantised.getpalette()
+    if palette_data:
+        palette_array = np.array(palette_data, dtype=np.uint8).reshape(-1, 3)
+        used = quantised.getcolors()
+        if used:
+            indices = [index for _count, index in used if index < len(palette_array)]
+            palette = palette_array[indices]
+        else:
+            palette = palette_array[:count]
+    else:
+        palette = np.array(quantised.convert("RGB")).reshape(-1, 3)
+
+    if palette.size == 0:
+        return np.linspace(0, 1, count)[:, None].repeat(3, axis=1)
+    palette = np.unique(palette.reshape(-1, 3), axis=0)
+    return palette.astype(np.float32) / 255.0
 
 
 def _srgb_to_linear(rgb: np.ndarray) -> np.ndarray:
