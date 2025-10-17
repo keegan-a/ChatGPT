@@ -39,6 +39,8 @@ const mapperStatus = document.querySelector('#mapperStatus');
 const mapperResultsBody = document.querySelector('#mapperResultsBody');
 const mapperRowTemplate = document.querySelector('#mapperRowTemplate');
 const mapperAiNotice = document.querySelector('#mapperAiNotice');
+const mapperRememberToggle = document.querySelector('#mapperRememberKey');
+const mapperForgetKeyBtn = document.querySelector('#mapperForgetKey');
 const startFocusToggle = document.querySelector('[data-action="toggle-focus"]');
 const body = document.body;
 
@@ -81,6 +83,7 @@ const entryFrequencies = ['daily', 'weekly', 'monthly'];
 
 const scopeOrder = ['daily', 'weekly', 'monthly', 'yearly'];
 const STORAGE_KEY = 'budget-builder-95-state-v3';
+const MAPPER_KEY_STORAGE = 'budget-builder-95-openai-key';
 
 const themeSequence = ['win95', 'xp', 'vista', 'mac'];
 
@@ -206,6 +209,37 @@ function scheduleStateSave() {
   }, 350);
 }
 
+function getStoredMapperKey() {
+  if (!('localStorage' in window)) {
+    return '';
+  }
+  try {
+    const encoded = window.localStorage.getItem(MAPPER_KEY_STORAGE);
+    if (!encoded) {
+      return '';
+    }
+    return atob(encoded);
+  } catch (error) {
+    console.warn('Unable to read stored API key:', error);
+    return '';
+  }
+}
+
+function persistMapperKey(key) {
+  if (!('localStorage' in window)) {
+    return;
+  }
+  try {
+    if (key) {
+      window.localStorage.setItem(MAPPER_KEY_STORAGE, btoa(key));
+    } else {
+      window.localStorage.removeItem(MAPPER_KEY_STORAGE);
+    }
+  } catch (error) {
+    console.warn('Unable to store API key preference:', error);
+  }
+}
+
 function getNextTheme(current) {
   const index = themeSequence.indexOf(current);
   if (index === -1) {
@@ -245,8 +279,9 @@ function syncAutoThemeToggle() {
 }
 
 const SCREENSAVER_INACTIVITY_MS = 120000;
-const PIPE_SEGMENT_LENGTH = 0.18;
-const PIPE_MAX_POINTS = 210;
+const PIPE_SEGMENT_LENGTH = 0.14;
+const PIPE_MAX_POINTS = 280;
+const PIPE_TURN_PROBABILITY = 0.18;
 const PIPE_DIRECTIONS = [
   { x: 1, y: 0, z: 0 },
   { x: -1, y: 0, z: 0 },
@@ -484,6 +519,18 @@ function init() {
   syncAllCategoryAmounts();
   updateFocusToggleLabel();
   renderAll();
+  if (mapperRememberToggle) {
+    mapperRememberToggle.checked = false;
+  }
+  if (mapperApiKeyInput) {
+    const storedKey = getStoredMapperKey();
+    if (storedKey) {
+      mapperApiKeyInput.value = storedKey;
+      if (mapperRememberToggle) {
+        mapperRememberToggle.checked = true;
+      }
+    }
+  }
   updateMapperStatus('Upload a statement image or paste text to start mapping.');
   initializeSnakeGame();
   initializeScreensaver();
@@ -1033,6 +1080,8 @@ function setMapperBusy(isBusy) {
   if (mapperClearBtn) mapperClearBtn.disabled = isBusy;
   if (mapperApplyAllBtn) mapperApplyAllBtn.disabled = isBusy || spendingImportState.entries.length === 0;
   if (mapperApiKeyInput) mapperApiKeyInput.disabled = isBusy;
+  if (mapperRememberToggle) mapperRememberToggle.disabled = isBusy;
+  if (mapperForgetKeyBtn) mapperForgetKeyBtn.disabled = isBusy;
   renderMapperEntries();
 }
 
@@ -1272,9 +1321,56 @@ function readFileAsBase64(file) {
   });
 }
 
-async function analyzeStatementWithAI(file, apiKey) {
-  if (!file) {
-    throw new Error('Choose an image before analyzing.');
+function isPdfFile(file) {
+  if (!file) return false;
+  const type = (file.type || '').toLowerCase();
+  if (type === 'application/pdf') return true;
+  return file.name?.toLowerCase().endsWith('.pdf');
+}
+
+async function readPdfAsText(file) {
+  if (!file) return '';
+  if (!window.pdfjsLib) {
+    throw new Error('PDF support is unavailable. Check your internet connection and refresh.');
+  }
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    if (window.pdfjsLib.GlobalWorkerOptions) {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = window.pdfjsLib.GlobalWorkerOptions.workerSrc || '';
+    }
+    if (typeof window.pdfjsLib.disableWorker !== 'undefined') {
+      window.pdfjsLib.disableWorker = true;
+    }
+    const loadingTask = window.pdfjsLib.getDocument({ data: arrayBuffer, useWorkerFetch: false, isEvalSupported: false });
+    const pdf = await loadingTask.promise;
+    const limit = Math.min(pdf.numPages, 12);
+    const parts = [];
+    for (let pageIndex = 1; pageIndex <= limit; pageIndex += 1) {
+      const page = await pdf.getPage(pageIndex);
+      const content = await page.getTextContent();
+      const pageText = content.items.map((item) => item.str).join(' ');
+      if (pageText.trim()) {
+        parts.push(`[Page ${pageIndex}] ${pageText.trim()}`);
+      }
+    }
+    return parts.join('\n\n');
+  } catch (error) {
+    console.warn('Unable to extract PDF text:', error);
+    throw new Error('Could not read the PDF. Try a smaller file or use manual entry.');
+  }
+}
+
+function truncateForModel(text, limit = 8000) {
+  if (!text || text.length <= limit) {
+    return text;
+  }
+  return `${text.slice(0, limit - 120)}… (truncated)`;
+}
+
+async function analyzeStatementWithAI(files, apiKey) {
+  const uploadFiles = Array.isArray(files) ? files : files ? [files] : [];
+  if (!uploadFiles.length) {
+    throw new Error('Choose at least one statement file before analyzing.');
   }
   if (!apiKey) {
     throw new Error('Provide an OpenAI API key to analyze statements.');
@@ -1282,7 +1378,42 @@ async function analyzeStatementWithAI(file, apiKey) {
   if (typeof fetch !== 'function') {
     throw new Error('This browser cannot make the required API request. Try manual entry instead.');
   }
-  const base64 = await readFileAsBase64(file);
+
+  const imagePayloads = [];
+  const pdfSnippets = [];
+  const unsupported = [];
+
+  for (const file of uploadFiles) {
+    if (!file) continue;
+    if (isPdfFile(file)) {
+      const text = await readPdfAsText(file);
+      if (text) {
+        const prefix = file.name ? `File: ${file.name}\n` : '';
+        pdfSnippets.push(`${prefix}${text}`);
+      }
+    } else if ((file.type || '').toLowerCase().startsWith('image/')) {
+      const base64 = await readFileAsBase64(file);
+      const detail = uploadFiles.length > 1 ? 'low' : 'high';
+      imagePayloads.push({
+        type: 'image_url',
+        image_url: {
+          detail,
+          url: `data:${file.type || 'image/png'};base64,${base64}`,
+        },
+      });
+    } else {
+      unsupported.push(file.name || file.type || 'Unknown file');
+    }
+  }
+
+  if (unsupported.length) {
+    throw new Error(`Unsupported file type: ${unsupported.join(', ')}. Use images or PDFs.`);
+  }
+
+  if (!imagePayloads.length && !pdfSnippets.length) {
+    throw new Error('No readable content was found. Try different files or manual entry.');
+  }
+
   const requestBody = {
     model: 'gpt-4o-mini',
     response_format: {
@@ -1320,19 +1451,27 @@ async function analyzeStatementWithAI(file, apiKey) {
       {
         role: 'system',
         content:
-          'You extract personal budget categories from bank statement screenshots. Return concise categories and total amounts.',
+          'You extract personal budget categories from bank statements and receipts. Return concise categories and total amounts.',
       },
       {
         role: 'user',
         content: [
-          { type: 'text', text: 'Identify recurring spending categories and their amounts from this statement.' },
           {
-            type: 'image_url',
-            image_url: {
-              detail: 'low',
-              url: `data:${file.type || 'image/png'};base64,${base64}`,
-            },
+            type: 'text',
+            text: 'Identify recurring spending categories and their amounts from these statements. Prioritize weekly or monthly cadences when possible.',
           },
+          ...imagePayloads,
+          ...(pdfSnippets.length
+            ? [
+                {
+                  type: 'text',
+                  text: truncateForModel(
+                    `Here are text excerpts from PDF statements:\n\n${pdfSnippets.join('\n\n---\n\n')}`,
+                    9000
+                  ),
+                },
+              ]
+            : []),
         ],
       },
     ],
@@ -2428,7 +2567,7 @@ function createPipe(startColor, endColor) {
     speed: 0.45 + Math.random() * 0.35,
     colors: [startColor, endColor],
   };
-  const seedSegments = 28 + Math.floor(Math.random() * 18);
+  const seedSegments = 42 + Math.floor(Math.random() * 24);
   for (let i = 0; i < seedSegments; i += 1) {
     extendPipe(pipe, i > 4);
   }
@@ -2436,6 +2575,9 @@ function createPipe(startColor, endColor) {
 }
 
 function chooseNextDirection(current) {
+  if (Math.random() < 0.55) {
+    return current;
+  }
   const choices = PIPE_DIRECTIONS.filter(
     (dir) => !(dir.x === -current.x && dir.y === -current.y && dir.z === -current.z)
   );
@@ -2481,7 +2623,7 @@ function extendPipe(pipe, allowTurn = true) {
     pipe.points.shift();
   }
 
-  if (allowTurn && Math.random() < 0.24) {
+  if (allowTurn && Math.random() < PIPE_TURN_PROBABILITY) {
     pipe.direction = chooseNextDirection(pipe.direction);
   }
 }
@@ -2585,6 +2727,11 @@ function drawScreensaverFrame() {
     ctx.lineTo(end.x + nx, end.y + ny);
     ctx.stroke();
     ctx.globalAlpha = 1;
+
+    ctx.fillStyle = lightenColor(startColor, 0.32 + highlight * 0.28);
+    ctx.beginPath();
+    ctx.arc(start.x, start.y, thickness / 2.4, 0, Math.PI * 2);
+    ctx.fill();
 
     ctx.fillStyle = lightenColor(endColor, 0.4 + highlight * 0.3);
     ctx.beginPath();
@@ -3196,21 +3343,74 @@ if (mapperAnalyzeBtn) {
     try {
       setMapperBusy(true);
       updateMapperStatus('Contacting OpenAI for analysis…');
-      const file = mapperFileInput?.files?.[0] || null;
+      const files = Array.from(mapperFileInput?.files || []);
       const apiKey = mapperApiKeyInput?.value?.trim();
-      const entries = await analyzeStatementWithAI(file, apiKey);
+      const entries = await analyzeStatementWithAI(files, apiKey);
       setMapperBusy(false);
+      if (mapperRememberToggle) {
+        if (mapperRememberToggle.checked && apiKey) {
+          persistMapperKey(apiKey);
+        } else if (!mapperRememberToggle.checked) {
+          persistMapperKey('');
+        }
+      }
       if (entries.length) {
         addImportEntries(entries, 'AI analysis');
       } else {
-        updateMapperStatus('OpenAI did not detect recurring categories in that screenshot.', 'error');
+        updateMapperStatus('OpenAI did not detect recurring categories in those statements.', 'error');
       }
     } catch (error) {
       setMapperBusy(false);
       updateMapperStatus(error.message, 'error');
       if (mapperAiNotice) {
         mapperAiNotice.textContent =
-          'AI import requires an active internet connection and a valid OpenAI API key. Manual entry always works offline.';
+          'AI import requires an active internet connection, a valid OpenAI API key, and compatible files (images or PDFs). Manual entry always works offline.';
+      }
+    }
+  });
+}
+
+if (mapperRememberToggle) {
+  mapperRememberToggle.addEventListener('change', () => {
+    if (spendingImportState.busy) {
+      return;
+    }
+    if (mapperRememberToggle.checked) {
+      const key = mapperApiKeyInput?.value?.trim();
+      if (key) {
+        persistMapperKey(key);
+      } else {
+        mapperRememberToggle.checked = false;
+        updateMapperStatus('Enter an API key before enabling “Remember this key”.', 'error');
+      }
+    } else {
+      persistMapperKey('');
+    }
+  });
+}
+
+if (mapperForgetKeyBtn) {
+  mapperForgetKeyBtn.addEventListener('click', () => {
+    if (spendingImportState.busy) {
+      return;
+    }
+    persistMapperKey('');
+    if (mapperApiKeyInput) {
+      mapperApiKeyInput.value = '';
+    }
+    if (mapperRememberToggle) {
+      mapperRememberToggle.checked = false;
+    }
+    updateMapperStatus('Saved API key cleared from this device.');
+  });
+}
+
+if (mapperApiKeyInput) {
+  mapperApiKeyInput.addEventListener('change', () => {
+    if (mapperRememberToggle?.checked) {
+      const key = mapperApiKeyInput.value.trim();
+      if (key) {
+        persistMapperKey(key);
       }
     }
   });

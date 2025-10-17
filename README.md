@@ -112,9 +112,10 @@ You now have access to:
 
 ### Spending Mapper & AI imports
 
-- Open the **Spending Mapper** from Start → Data tools to paste plain-text statements or upload a screenshot.
+- Open the **Spending Mapper** from Start → Data tools to paste plain-text statements or upload one or more screenshots and/or bank-statement PDFs.
 - Manual lines work best in the format `Category - Amount - cadence`. Supported cadences include daily, weekly, monthly, biweekly (converted to weekly), and yearly (converted to monthly).
-- To try AI assistance, paste an OpenAI API key (sk-...) and upload a statement image. The request is sent directly to OpenAI; no key is stored in the app. If you are offline or the key is missing/invalid the analysis will fail—manual entry always remains available.
+- To try AI assistance, paste (or restore) an OpenAI API key, choose your files, and click **Analyze with AI**. You can optionally enable **Remember this key on this device** to keep the key in local storage for future sessions—use the **Forget saved key** button to clear it at any time.
+- The analyzer can ingest multiple files at once. Images are sent directly to OpenAI, while PDFs are text-parsed locally via [pdf.js](https://mozilla.github.io/pdf.js/) before the excerpts are included in the request. A live internet connection is required for both the pdf.js loader and the OpenAI request; if either step fails you can still use manual entry.
 - Map detected entries to existing categories or create new ones, then apply them individually or all at once.
 
 ---

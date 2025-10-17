@@ -397,15 +397,28 @@
             <h3>AI-assisted import</h3>
             <p>
               Provide your <abbr title="Application Programming Interface">API</abbr> key and upload
-              a screenshot. Data stays on this device and sends directly to OpenAI.
+              one or more screenshots or bank statement PDFs. Files stay on this device and are only
+              sent directly to OpenAI for analysis.
             </p>
             <label class="mapper-field">
               API key
               <input type="password" id="mapperApiKey" autocomplete="off" placeholder="sk-..." />
             </label>
+            <label class="mapper-remember">
+              <input type="checkbox" id="mapperRememberKey" />
+              Remember this key on this device
+            </label>
+            <button type="button" class="btn-tertiary mapper-clear-key" id="mapperForgetKey">
+              Forget saved key
+            </button>
             <label class="mapper-field">
-              Statement image
-              <input type="file" id="mapperFile" accept="image/*" />
+              Statements
+              <input
+                type="file"
+                id="mapperFile"
+                accept="image/*,application/pdf"
+                multiple
+              />
             </label>
             <button type="button" class="btn-secondary" id="mapperAnalyzeBtn">Analyze with AI</button>
             <p class="mapper-note" id="mapperAiNotice">
@@ -688,6 +701,12 @@
       <p class="screensaver-hint">Move your mouse or press any key to exit 3D Pipes.</p>
     </div>
 
+    <script
+      defer
+      src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.10.111/pdf.min.js"
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    ></script>
     <script src="app.js" type="module"></script>
   </body>
 </html>
