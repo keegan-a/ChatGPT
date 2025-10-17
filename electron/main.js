@@ -1,25 +1,40 @@
 const { app, BrowserWindow, Menu, nativeImage } = require('electron');
 const path = require('path');
+const fs = require('fs');
 
 const isDev = !app.isPackaged;
 
-function createWindow() {
-  const packagedIconPath = path.join(__dirname, '..', 'dist', 'icons', 'budget95-icon-512.png');
-  let appIcon = undefined;
-  try {
-    if (require('fs').existsSync(packagedIconPath)) {
-      appIcon = nativeImage.createFromPath(packagedIconPath);
+function resolveIcon() {
+  const distIcons = path.join(__dirname, '..', 'dist', 'icons');
+  const sourceIcons = path.join(__dirname, '..', 'icons');
+
+  const platformCandidates = process.platform === 'win32'
+    ? ['budget95.ico', 'budget95-512.png']
+    : process.platform === 'darwin'
+      ? ['budget95.icns', 'budget95-512.png']
+      : ['budget95-512.png', 'budget95.ico'];
+
+  for (const directory of [distIcons, sourceIcons]) {
+    for (const filename of platformCandidates) {
+      const candidate = path.join(directory, filename);
+      try {
+        if (fs.existsSync(candidate)) {
+          const icon = nativeImage.createFromPath(candidate);
+          if (icon && !icon.isEmpty()) {
+            return icon;
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to load icon candidate:', candidate, error);
+      }
     }
-    if (!appIcon || appIcon.isEmpty()) {
-      const fallbackPath = path.join(__dirname, '..', 'icons', 'budget95-icon-512x512.base64.txt');
-      const raw = require('fs').readFileSync(fallbackPath, 'utf8').trim();
-      const base64 = raw.includes(',') ? raw.split(',').pop() : raw;
-      const buffer = Buffer.from(base64, 'base64');
-      appIcon = nativeImage.createFromBuffer(buffer);
-    }
-  } catch (error) {
-    console.warn('Unable to load icon for Electron window:', error);
   }
+
+  return undefined;
+}
+
+function createWindow() {
+  const appIcon = resolveIcon();
 
   const window = new BrowserWindow({
     width: 1440,
@@ -34,18 +49,20 @@ function createWindow() {
     }
   });
 
-  const fileUrl = `file://${path.join(__dirname, '..', 'dist', 'index.html')}`;
+  const indexFile = path.join(__dirname, '..', 'dist', 'index.html');
   const devServer = process.env.BUDGET95_DEV_SERVER || 'http://localhost:8000/';
-  const startUrl = isDev ? devServer : fileUrl;
-
-  window.loadURL(startUrl).catch((error) => {
-    if (isDev) {
-      console.warn(`Falling back to packaged assets because ${startUrl} was unreachable:`, error.message);
-      return window.loadURL(fileUrl);
-    } else {
-      throw error;
-    }
-  });
+  if (isDev) {
+    window.loadURL(devServer).catch((error) => {
+      console.warn(`Falling back to packaged assets because ${devServer} was unreachable:`, error.message);
+      return window.loadFile(indexFile);
+    }).catch((error) => {
+      console.error('Failed to load local assets in development mode:', error);
+    });
+  } else {
+    window.loadFile(indexFile).catch((error) => {
+      console.error('Failed to load packaged assets:', error);
+    });
+  }
 
   if (isDev) {
     window.webContents.openDevTools({ mode: 'detach' });
