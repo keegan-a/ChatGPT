@@ -90,11 +90,13 @@ You now have access to:
 - Auto theme cycling and keyboard shortcuts (`Ctrl` + `←`/`→`, `Ctrl` + `Shift` + `F`) for rapid navigation.
 - A budget health gauge that shows how much of your income the plan is consuming.
 - The Spending Mapper window for manual or AI-assisted transaction imports.
+- Desktop icons that open Classic Snake or the AI co-pilot, mirroring a vintage OS desktop.
 
 ---
 
 ## 6. Retro desktop tips
 - The **taskbar** keeps a button for every window. Click a button to bring its panel forward or to restore it if you minimized it.
+- Desktop icons in the upper-left corner launch Classic Snake or the AI Budget Co-Pilot without diving into the Start menu.
 - Tap the green **Start** button to open the Start menu. From there you can re-open closed windows, switch between the Windows 95, Windows XP Bliss, Windows Vista, or 2000s Macintosh aesthetics, jump into the Final Budget Showcase, launch the Classic Snake easter egg, or fire up the newly 3D-rendered Pipes screensaver.
 - Window controls now mimic the original desktop experience—hover to see their labels, minimize panels to the taskbar, or double-click title bars to maximize and restore.
 - The **Data tools** section of the Start menu lets you launch the Spending Mapper, cascade or tile every window, or toggle a focus mode that spotlights the active panel.
@@ -114,9 +116,16 @@ You now have access to:
 
 - Open the **Spending Mapper** from Start → Data tools to paste plain-text statements or upload one or more screenshots and/or bank-statement PDFs.
 - Manual lines work best in the format `Category - Amount - cadence`. Supported cadences include daily, weekly, monthly, biweekly (converted to weekly), and yearly (converted to monthly).
-- To try AI assistance, paste (or restore) an OpenAI API key, choose your files, and click **Analyze with AI**. You can optionally enable **Remember this key on this device** to keep the key in local storage for future sessions—use the **Forget saved key** button to clear it at any time.
+- To try AI assistance, paste (or restore) an OpenAI API key, load your files, fine-tune the **Analysis focus** field if you want extra guidance, and click **Analyze with AI**. You can optionally enable **Remember this key on this device** to keep the key in local storage for future sessions—use the **Forget saved key** button to clear it at any time.
+- The default prompt now asks the model to read every transaction, call out subscriptions like Adobe Creative Cloud by name, and infer cadence from how often a merchant appears. Add your own instructions in the field to emphasize edge cases or budgeting priorities.
 - The analyzer can ingest multiple files at once. Images are sent directly to OpenAI, while PDFs are text-parsed locally via [pdf.js](https://mozilla.github.io/pdf.js/) before the excerpts are included in the request. A live internet connection is required for both the pdf.js loader and the OpenAI request; if either step fails you can still use manual entry.
 - Map detected entries to existing categories or create new ones, then apply them individually or all at once.
+
+### AI Budget Co-Pilot
+
+- Launch the **AI Budget Co-Pilot** from the desktop icon or Start → Data tools to ask for clarifications, cleanup ideas, or savings strategies.
+- The co-pilot reuses the OpenAI key you saved for the Spending Mapper and remembers the last several prompts so you can iterate quickly on follow-up questions.
+- Replies stay concise (under roughly 180 words) and often include checklists you can apply manually inside the Categories Planner.
 
 ---
 
@@ -192,6 +201,16 @@ You can package the launcher and static assets with [PyInstaller](https://pyinst
     desktop_launcher.py
    ```
 4. The bundled app will appear in the `dist/` directory (for example `dist/desktop_launcher.exe`). Place it alongside the included assets or compress the folder to share.
+
+### Package for Android and iOS (optional)
+
+Because Budget Builder 95 is a Progressive Web App, you can generate mobile installers without rewriting any code:
+
+1. Deploy the `index.html`, `app.js`, `styles.css`, `manifest.json`, `sw.js`, and `icons/` folder to a static host (GitHub Pages, Netlify, Vercel, etc.) or expose `python -m http.server` through a tunnel such as [ngrok](https://ngrok.com/).
+2. Visit [PWABuilder](https://www.pwabuilder.com/), paste the hosted URL, and run the manifest/service worker audit (the included files already satisfy the requirements).
+3. Choose **Build My PWA** to download platform packages. PWABuilder produces an Android `.apk`/`.aab` plus an iOS Xcode project that uses the retro icon defined in `manifest.json`.
+4. Follow the generated README to sign and sideload the Android bundle or archive the iOS project for TestFlight/App Store distribution. For personal use you can sideload the unsigned Android build immediately.
+5. Optional: tools such as [Capacitor](https://capacitorjs.com/) or [Expo](https://expo.dev/) can wrap the same web assets if you prefer maintaining native projects by hand.
 
 ## 10. Stop the server and exit the environment
 - To stop the server, return to the terminal running `python -m http.server` and press `Ctrl + C`.

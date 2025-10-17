@@ -25,15 +25,25 @@
   </head>
   <body class="theme-win95">
     <div class="noise-overlay"></div>
-    <header class="banner">
-      <h1>Budget Builder 95</h1>
-      <p class="tagline">
-        Dial-up your finances with a custom budget inspired by a typical
-        millennial's lifestyle.
-      </p>
-    </header>
-
     <main class="app-frame">
+      <nav class="desktop-icons" aria-label="Desktop icons">
+        <button
+          type="button"
+          class="desktop-icon"
+          data-open-window="snake"
+        >
+          <span class="desktop-icon__glyph" aria-hidden="true">🐍</span>
+          <span class="desktop-icon__label">Snake</span>
+        </button>
+        <button
+          type="button"
+          class="desktop-icon"
+          data-open-window="assistant"
+        >
+          <span class="desktop-icon__glyph" aria-hidden="true">🤖</span>
+          <span class="desktop-icon__label">AI Co-Pilot</span>
+        </button>
+      </nav>
       <section
         class="panel window panel-income"
         aria-labelledby="panelIncomeTitle"
@@ -420,9 +430,18 @@
                 multiple
               />
             </label>
+            <label class="mapper-field">
+              Analysis focus (optional)
+              <textarea
+                id="mapperPrompt"
+                rows="3"
+                placeholder="Highlight anything unique about this statement you want the AI to catch."
+              ></textarea>
+            </label>
             <button type="button" class="btn-secondary" id="mapperAnalyzeBtn">Analyze with AI</button>
             <p class="mapper-note" id="mapperAiNotice">
-              Don’t have an API key or prefer manual control? Use the manual entry area below.
+              Don’t have an API key or prefer manual control? Use the manual entry area below. The
+              analyzer reviews every visible transaction and avoids merging unrelated purchases.
             </p>
           </div>
           <div class="mapper-manual">
@@ -582,6 +601,80 @@
           <p class="snake-status" id="snakeStatus" role="status">Use arrow keys to play.</p>
         </div>
       </section>
+      <section
+        class="panel window panel-assistant hidden-window"
+        aria-labelledby="panelAssistantTitle"
+        data-window-id="assistant"
+        data-window-title="AI Budget Co-Pilot"
+        data-initial-state="closed"
+        data-width="460"
+        data-height="520"
+        data-min-width="360"
+        data-min-height="360"
+        data-x="260"
+        data-y="180"
+      >
+        <header class="window-header" data-drag-handle>
+          <h2 class="window-title" id="panelAssistantTitle">AI Budget Co-Pilot</h2>
+          <div class="window-controls">
+            <button
+              class="window-control"
+              data-window-action="minimize"
+              type="button"
+              title="Minimize window"
+              aria-label="Minimize window"
+            >
+              <span class="window-control__icon" aria-hidden="true">–</span>
+              <span class="visually-hidden">Minimize AI Budget Co-Pilot window</span>
+            </button>
+            <button
+              class="window-control"
+              data-window-action="maximize"
+              type="button"
+              title="Maximize window"
+              aria-label="Maximize window"
+            >
+              <span class="window-control__icon" aria-hidden="true">▢</span>
+              <span class="visually-hidden">Maximize AI Budget Co-Pilot window</span>
+            </button>
+            <button
+              class="window-control"
+              data-window-action="close"
+              type="button"
+              title="Close window"
+              aria-label="Close window"
+            >
+              <span class="window-control__icon" aria-hidden="true">✕</span>
+              <span class="visually-hidden">Close AI Budget Co-Pilot window</span>
+            </button>
+          </div>
+        </header>
+        <div class="window-body assistant-body">
+          <p class="assistant-lead">
+            Ask follow-up questions or request corrections. Responses reuse the same OpenAI key you
+            supply for the Spending Mapper.
+          </p>
+          <div class="assistant-log" id="assistantLog" role="log" aria-live="polite"></div>
+          <form id="assistantForm" class="assistant-form">
+            <label for="assistantMessage">Message</label>
+            <textarea
+              id="assistantMessage"
+              rows="3"
+              placeholder="Describe what you want to adjust or clarify."
+              required
+            ></textarea>
+            <div class="assistant-actions">
+              <button type="submit" class="btn-primary">Ask AI</button>
+              <button type="button" class="btn-tertiary" id="assistantReset">Clear conversation</button>
+            </div>
+          </form>
+          <p class="assistant-tip">
+            Tip: Mention the category name or amount you want to adjust. The co-pilot suggests edits
+            you can apply manually.
+          </p>
+          <div class="assistant-status" id="assistantStatus" role="status" aria-live="polite"></div>
+        </div>
+      </section>
     </main>
 
     <template id="rowTemplate">
@@ -657,6 +750,9 @@
           <h3>Data tools</h3>
           <button class="start-menu__item" data-open-window="mapper">
             🧾 Spending Mapper
+          </button>
+          <button class="start-menu__item" data-open-window="assistant">
+            🤖 Budget AI Co-Pilot
           </button>
           <button class="start-menu__item" data-action="cascade-windows">
             🪟 Cascade all windows

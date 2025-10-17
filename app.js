@@ -42,6 +42,13 @@ const mapperAiNotice = document.querySelector('#mapperAiNotice');
 const mapperRememberToggle = document.querySelector('#mapperRememberKey');
 const mapperForgetKeyBtn = document.querySelector('#mapperForgetKey');
 const startFocusToggle = document.querySelector('[data-action="toggle-focus"]');
+const mapperPromptInput = document.querySelector('#mapperPrompt');
+const assistantLog = document.querySelector('#assistantLog');
+const assistantForm = document.querySelector('#assistantForm');
+const assistantMessageInput = document.querySelector('#assistantMessage');
+const assistantResetBtn = document.querySelector('#assistantReset');
+const assistantStatus = document.querySelector('#assistantStatus');
+const desktopIconsContainer = document.querySelector('.desktop-icons');
 const body = document.body;
 
 const scopeFactors = {
@@ -84,8 +91,31 @@ const entryFrequencies = ['daily', 'weekly', 'monthly'];
 const scopeOrder = ['daily', 'weekly', 'monthly', 'yearly'];
 const STORAGE_KEY = 'budget-builder-95-state-v3';
 const MAPPER_KEY_STORAGE = 'budget-builder-95-openai-key';
+const MAPPER_PROMPT_STORAGE = 'budget-builder-95-openai-instructions';
 
 const themeSequence = ['win95', 'xp', 'vista', 'mac'];
+
+const DEFAULT_MAPPER_PROMPT = [
+  'Review every transaction that appears in the provided screenshots or PDF excerpts.',
+  'Do not skip low-dollar recurring charges or merge unrelated merchants under one label.',
+  'Group identical merchants together only when they clearly represent the same bill (for example, multiple grocery visits).',
+  'Call out subscription services such as Adobe Creative Cloud by name and note the cadence you infer from the dates.',
+  'If cadence is unclear, assume monthly and mention the assumption in the notes.',
+].join('\n');
+
+const ANALYZER_SYSTEM_PROMPT = [
+  'You are a meticulous financial analyst who transcribes bank and card statements into budget-friendly summaries.',
+  'Read every supplied line item, infer realistic cadences (daily, weekly, biweekly, monthly, yearly), and output concise JSON that matches the provided schema.',
+  'Never invent merchants or combine unrelated purchases. When a value is ambiguous, omit it instead of guessing.',
+].join(' ');
+
+const ASSISTANT_SYSTEM_PROMPT = [
+  'You are a collaborative budgeting co-pilot embedded inside a retro desktop app.',
+  'Provide actionable advice about adjusting categories, reconciling imports, or improving savings plans.',
+  'Reference the user\'s message directly, keep responses concise (under 180 words), and present checklists or numbered steps when suggesting changes.',
+].join(' ');
+
+const ASSISTANT_HISTORY_LIMIT = 10;
 
 const futureHorizons = [
   { label: '1 Month', weeks: 4.345 },
@@ -240,6 +270,34 @@ function persistMapperKey(key) {
   }
 }
 
+function getStoredMapperPrompt() {
+  if (!('localStorage' in window)) {
+    return '';
+  }
+  try {
+    return window.localStorage.getItem(MAPPER_PROMPT_STORAGE) || '';
+  } catch (error) {
+    console.warn('Unable to read stored analysis instructions:', error);
+    return '';
+  }
+}
+
+function persistMapperPrompt(prompt) {
+  if (!('localStorage' in window)) {
+    return;
+  }
+  try {
+    const trimmed = prompt.trim();
+    if (!trimmed || trimmed === DEFAULT_MAPPER_PROMPT.trim()) {
+      window.localStorage.removeItem(MAPPER_PROMPT_STORAGE);
+    } else {
+      window.localStorage.setItem(MAPPER_PROMPT_STORAGE, trimmed);
+    }
+  } catch (error) {
+    console.warn('Unable to store analysis instructions:', error);
+  }
+}
+
 function getNextTheme(current) {
   const index = themeSequence.indexOf(current);
   if (index === -1) {
@@ -356,6 +414,11 @@ const spendingImportState = {
   entries: [],
   busy: false,
   message: '',
+};
+
+const assistantState = {
+  messages: [],
+  busy: false,
 };
 
 const WINDOW_MODE_BREAKPOINT = 860;
@@ -531,11 +594,16 @@ function init() {
       }
     }
   }
+  if (mapperPromptInput) {
+    const savedPrompt = getStoredMapperPrompt();
+    mapperPromptInput.value = savedPrompt || DEFAULT_MAPPER_PROMPT;
+  }
   updateMapperStatus('Upload a statement image or paste text to start mapping.');
   initializeSnakeGame();
   initializeScreensaver();
   registerWindows();
   startTaskbarClock();
+  renderAssistantLog();
   scheduleStateSave();
 }
 
@@ -1085,6 +1153,76 @@ function setMapperBusy(isBusy) {
   renderMapperEntries();
 }
 
+function updateAssistantStatus(message, tone = 'info') {
+  if (!assistantStatus) return;
+  assistantStatus.textContent = message || '';
+  if (message) {
+    assistantStatus.dataset.tone = tone;
+  } else {
+    assistantStatus.removeAttribute('data-tone');
+  }
+}
+
+function setAssistantBusy(isBusy) {
+  assistantState.busy = isBusy;
+  if (assistantForm) {
+    const controls = assistantForm.querySelectorAll('textarea, button');
+    controls.forEach((element) => {
+      element.disabled = isBusy;
+    });
+    if (assistantResetBtn) {
+      assistantResetBtn.disabled = isBusy;
+    }
+  }
+  if (assistantMessageInput && !isBusy) {
+    assistantMessageInput.focus();
+  }
+}
+
+function renderAssistantLog() {
+  if (!assistantLog) return;
+  assistantLog.innerHTML = '';
+  if (!assistantState.messages.length) {
+    const empty = document.createElement('div');
+    empty.className = 'assistant-log__empty';
+    empty.textContent = 'No conversation yet. Ask a question to get started.';
+    assistantLog.appendChild(empty);
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  assistantState.messages.forEach((message) => {
+    const entry = document.createElement('div');
+    entry.className = `assistant-entry assistant-entry--${message.role}`;
+
+    const roleLabel = document.createElement('span');
+    roleLabel.className = 'assistant-entry__role';
+    roleLabel.textContent = message.role === 'assistant' ? 'AI' : 'You';
+
+    const bubble = document.createElement('div');
+    bubble.className = 'assistant-entry__bubble';
+    bubble.textContent = message.content;
+
+    entry.append(roleLabel, bubble);
+    fragment.appendChild(entry);
+  });
+
+  assistantLog.appendChild(fragment);
+  assistantLog.scrollTop = assistantLog.scrollHeight;
+}
+
+function appendAssistantMessage(role, content) {
+  const text = typeof content === 'string' ? content.trim() : '';
+  if (!text) {
+    return;
+  }
+  assistantState.messages.push({ role, content: text });
+  if (assistantState.messages.length > ASSISTANT_HISTORY_LIMIT * 2) {
+    assistantState.messages.splice(0, assistantState.messages.length - ASSISTANT_HISTORY_LIMIT * 2);
+  }
+  renderAssistantLog();
+}
+
 function generateImportId() {
   if (window.crypto?.randomUUID) {
     return `import-${crypto.randomUUID()}`;
@@ -1414,6 +1552,21 @@ async function analyzeStatementWithAI(files, apiKey) {
     throw new Error('No readable content was found. Try different files or manual entry.');
   }
 
+  const promptInstructions = (mapperPromptInput?.value || '').trim() || DEFAULT_MAPPER_PROMPT;
+  const supplementalRules = [
+    'Supplemental rules:',
+    '• Examine every transaction across all pages—never summarize just a portion of the statement.',
+    '• Keep merchant names intact. Highlight recurring software or subscription charges (for example, “Adobe Creative Cloud”).',
+    '• When a merchant appears multiple times, sum the month\'s total and infer cadence from the count (4+ times → weekly, 2 times → biweekly, 1 time → monthly).',
+    '• Treat any one-off purchase above $20 as a monthly item and note that it is a one-time expense.',
+  ].join('\n');
+
+  const userInstructionText = [
+    promptInstructions,
+    supplementalRules,
+    'Return JSON that follows the provided schema. Amounts must be positive USD numbers and notes should mention how you grouped the line items or any assumptions made.',
+  ].join('\n\n');
+
   const requestBody = {
     model: 'gpt-4o-mini',
     response_format: {
@@ -1450,15 +1603,14 @@ async function analyzeStatementWithAI(files, apiKey) {
     messages: [
       {
         role: 'system',
-        content:
-          'You extract personal budget categories from bank statements and receipts. Return concise categories and total amounts.',
+        content: ANALYZER_SYSTEM_PROMPT,
       },
       {
         role: 'user',
         content: [
           {
             type: 'text',
-            text: 'Identify recurring spending categories and their amounts from these statements. Prioritize weekly or monthly cadences when possible.',
+            text: userInstructionText,
           },
           ...imagePayloads,
           ...(pdfSnippets.length
@@ -1538,6 +1690,51 @@ async function analyzeStatementWithAI(files, apiKey) {
       notes: transaction.notes || 'AI-assisted import',
     };
   }).filter(Boolean);
+}
+
+async function fetchAssistantReply(apiKey) {
+  if (!apiKey) {
+    throw new Error('Enter an OpenAI API key before chatting with the co-pilot.');
+  }
+  if (!assistantState.messages.length) {
+    throw new Error('Share a question or goal to start the conversation.');
+  }
+
+  const recentHistory = assistantState.messages.slice(-ASSISTANT_HISTORY_LIMIT);
+  const messages = [
+    { role: 'system', content: ASSISTANT_SYSTEM_PROMPT },
+    ...recentHistory.map((entry) => ({
+      role: entry.role === 'assistant' ? 'assistant' : 'user',
+      content: entry.content,
+    })),
+  ];
+
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      messages,
+      temperature: 0.55,
+      max_tokens: 600,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`OpenAI API responded with ${response.status}: ${errorText}`);
+  }
+
+  const payload = await response.json();
+  const content = payload?.choices?.[0]?.message?.content;
+  if (!content) {
+    throw new Error('The co-pilot returned an empty response. Try again.');
+  }
+
+  return content.trim();
 }
 
 function renderFinalShowcase() {
@@ -3370,6 +3567,12 @@ if (mapperAnalyzeBtn) {
   });
 }
 
+if (mapperPromptInput) {
+  mapperPromptInput.addEventListener('input', () => {
+    persistMapperPrompt(mapperPromptInput.value);
+  });
+}
+
 if (mapperRememberToggle) {
   mapperRememberToggle.addEventListener('change', () => {
     if (spendingImportState.busy) {
@@ -3412,6 +3615,65 @@ if (mapperApiKeyInput) {
       if (key) {
         persistMapperKey(key);
       }
+    }
+  });
+}
+
+if (assistantForm) {
+  assistantForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (assistantState.busy) {
+      return;
+    }
+    const raw = assistantMessageInput?.value || '';
+    const text = raw.trim();
+    if (!text) {
+      updateAssistantStatus('Type a message before asking the co-pilot.', 'error');
+      return;
+    }
+    const apiKey = mapperApiKeyInput?.value?.trim();
+    if (!apiKey) {
+      updateAssistantStatus('Provide an OpenAI API key to enable the co-pilot.', 'error');
+      return;
+    }
+    appendAssistantMessage('user', text);
+    if (assistantMessageInput) {
+      assistantMessageInput.value = '';
+    }
+    updateAssistantStatus('Consulting the co-pilot…');
+    try {
+      setAssistantBusy(true);
+      const reply = await fetchAssistantReply(apiKey);
+      appendAssistantMessage('assistant', reply);
+      updateAssistantStatus('Response ready.', 'success');
+    } catch (error) {
+      updateAssistantStatus(error.message, 'error');
+    } finally {
+      setAssistantBusy(false);
+    }
+  });
+}
+
+if (assistantResetBtn) {
+  assistantResetBtn.addEventListener('click', () => {
+    if (assistantState.busy) {
+      return;
+    }
+    assistantState.messages = [];
+    renderAssistantLog();
+    updateAssistantStatus('Conversation cleared.');
+  });
+}
+
+if (desktopIconsContainer) {
+  desktopIconsContainer.addEventListener('click', (event) => {
+    const icon = event.target.closest('.desktop-icon');
+    if (!icon) return;
+    const id = icon.dataset.openWindow;
+    if (!id) return;
+    openWindow(id);
+    if (id === 'snake') {
+      drawSnakeFrame();
     }
   });
 }
