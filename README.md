@@ -137,7 +137,7 @@ You now have access to:
 
 ## 8. Install Budget Builder 95 like an app
 
-Budget Builder 95 now ships as a Progressive Web App (PWA), so you can pin it to your desktop or phone home screen.
+Budget Builder 95 ships as a Progressive Web App (PWA), so you can pin it to your desktop or phone home screen without extra tooling.
 
 - **Desktop (Chrome / Edge):** With the app open, click the install icon in the address bar or open the browser menu → **Install Budget Builder 95**.
 - **iOS Safari:** Tap the share button → **Add to Home Screen**.
@@ -145,62 +145,77 @@ Budget Builder 95 now ships as a Progressive Web App (PWA), so you can pin it to
 
 After installation you’ll see a custom retro icon and can launch the budgeting desktop directly without re-opening the browser.
 
-## 9. Launch it like a desktop app (optional)
+## 9. Launch it like a desktop app (Python-free)
 
-If you’d rather double-click an app icon, use the included launcher script:
+If you’d rather double-click an app icon without running commands every time, use the included launcher script once to generate a shortcut:
 
 1. Make sure your virtual environment is active (see sections above).
 2. From the project folder run:
    ```bash
    python desktop_launcher.py
    ```
-3. Your default browser will open to the hosted app. Pass `--no-browser` if you want to launch the server silently and open the URL manually.
+3. Your default browser will open to the hosted app. Pass `--no-browser` if you want to launch the server silently and open the URL manually. You can also create a desktop shortcut to this script once you are happy with the setup.
 
-## 10. Create native installers with Electron
+## 10. Build native desktop installers with Electron
 
-For a command-prompt-free desktop experience, use the bundled Electron configuration to generate `.exe`, `.dmg`, and `.AppImage` builds:
+Use the bundled Electron configuration to generate `.exe`, `.dmg`, and `.AppImage` builds that run without a browser:
 
 1. Install [Node.js](https://nodejs.org/) (version 18 or newer is recommended).
 2. Inside the project folder run:
    ```bash
    npm install
    ```
-   This pulls in Electron, electron-builder, and Capacitor tooling.
-3. Prepare the web assets (copies everything into `dist/`):
-   ```bash
-   npm run prepare:web
-   ```
-4. Start the desktop app in development mode (uses your running `python -m http.server` on port 8000 if available):
+   This installs Electron, electron-builder, and the Capacitor toolchain.
+3. To preview the desktop shell (optional) launch the development build:
    ```bash
    npm run electron:dev
    ```
-5. When you’re ready to ship installers, build them with:
+   The window falls back to the packaged assets automatically if you are not running `python -m http.server`.
+4. Create installable packages with:
    ```bash
-   npm run electron:build
+   npm run package:desktop
    ```
-   The signed output lives in the `release/` folder and includes Windows `.exe` (NSIS installer), macOS `.dmg`, and Linux `.AppImage` packages. Double-click the appropriate file to install without touching the terminal.
+   Electron Builder places the output in the `release/` folder and produces Windows `.exe` (NSIS installer), macOS `.dmg`, and Linux `.AppImage` artifacts. Double-click the file that matches your platform to install Budget Builder 95 permanently.
 
 > **Icon tip:** Electron automatically reads the retro icon from `icons/budget95-icon-512x512.base64.txt`. If you need a traditional `.ico` for Windows shortcuts, decode the base64 payload using the snippet in [icons/README](icons/README.md) or any base64-to-ICO converter.
 
-## 11. Prepare Android/iOS shells with Capacitor
+## 11. Package Android and iOS builds with Capacitor
 
-Prefer native launchers on your phone? The included Capacitor configuration wraps the same `dist/` bundle:
+Prefer native launchers on your phone? Capacitor wraps the same `dist/` bundle inside Android and iOS shells.
 
-1. Ensure Node.js dependencies are installed (`npm install`).
-2. Generate fresh web assets:
-   ```bash
-   npm run prepare:web
-   ```
-3. Sync Capacitor (creates the `android/` and `ios/` projects on first run):
-   ```bash
-   npm run cap:init
-   ```
-4. Open the native projects in their respective IDEs:
-   ```bash
-   npm run cap:open:android   # opens Android Studio for APK/AAB generation
-   npm run cap:open:ios       # opens Xcode for iOS builds/TestFlight
-   ```
-5. From Android Studio or Xcode you can build signed releases, deploy to emulators, or sideload directly to your devices. Capacitor copies the retro icon and manifest metadata automatically—update `capacitor.config.json` if you want a different app name or bundle identifier.
+### One-time platform setup
+
+```bash
+npm install                    # already run for the desktop build step
+npm run cap:add:android        # creates android/ with Gradle & icon assets
+npm run cap:add:ios            # creates ios/ with an Xcode project (macOS only)
+```
+
+These commands install the official `@capacitor/android` and `@capacitor/ios` packages, generate the platform projects, and copy the prepared web assets automatically.
+
+### Generate updated bundles
+
+Whenever you change the web app, sync the native projects:
+
+```bash
+npm run cap:init               # rebuilds dist/ and copies it into android/ & ios/
+```
+
+### Build installable packages
+
+- **Android:**
+  ```bash
+  npm run package:android      # produces a debug APK/AAB using the local Android SDK
+  ```
+  Open the generated Android Studio project (`npm run cap:open:android`) if you prefer a graphical build pipeline or need to create signed releases for the Play Store.
+
+- **iOS (macOS required):**
+  ```bash
+  npm run package:ios          # triggers an Xcode build via Capacitor
+  ```
+  Launch the workspace in Xcode (`npm run cap:open:ios`) to archive the app, create signing certificates, or push the build to TestFlight.
+
+Both platforms reuse the same retro icons and app metadata defined in `capacitor.config.json`. Update that file if you want to change the displayed app name, bundle IDs, or splash colors.
 
 > **Quick alternative:** PWABuilder still works great if you prefer a web-only workflow. Point it at a hosted version of the app to download ready-made store bundles without maintaining native projects locally.
 
