@@ -156,63 +156,55 @@ If you’d rather double-click an app icon, use the included launcher script:
    ```
 3. Your default browser will open to the hosted app. Pass `--no-browser` if you want to launch the server silently and open the URL manually.
 
-### Bundle a standalone executable (advanced)
+## 10. Create native installers with Electron
 
-You can package the launcher and static assets with [PyInstaller](https://pyinstaller.org/) for a fully self-contained app:
+For a command-prompt-free desktop experience, use the bundled Electron configuration to generate `.exe`, `.dmg`, and `.AppImage` builds:
 
-1. Install the tool inside your virtual environment:
+1. Install [Node.js](https://nodejs.org/) (version 18 or newer is recommended).
+2. Inside the project folder run:
    ```bash
-   pip install pyinstaller
+   npm install
    ```
-2. (Optional) Create a Windows `.ico` file from the provided assets if you plan to build on Windows:
+   This pulls in Electron, electron-builder, and Capacitor tooling.
+3. Prepare the web assets (copies everything into `dist/`):
    ```bash
-   python -m pip install pillow
-   python - <<"PY"
-   from pathlib import Path
-   from PIL import Image
-
-   # Decode the embedded PNG (stored as base64 text) before exporting to .ico
-   import base64
-
-   png_data = Path("icons/budget95-icon-512x512.base64.txt").read_text()
-   _, _, payload = png_data.partition(',')
-   icon_bytes = base64.b64decode(payload)
-   target_png = Path("icons") / "budget95-icon-512.png"
-   target_png.write_bytes(icon_bytes)
-   icon = Image.open(target_png)
-   icon.save(Path("icons") / "budget95-icon.ico")
-   target_png.unlink()
-   PY
+   npm run prepare:web
    ```
-   > Tip: The project stores its PNG icon variants as base64 text inside `icons/*.base64.txt` to keep the repository friendly to
-   > source-control previews. Decode whichever size you need before packaging.
-3. Build the executable. On Windows:
-   ```powershell
-   pyinstaller --onefile --windowed --icon icons/budget95-icon.ico \
-     --add-data "index.html;." --add-data "app.js;." --add-data "styles.css;." \
-     --add-data "manifest.json;." --add-data "sw.js;." --add-data "icons;icons" \
-     desktop_launcher.py
-   ```
-   On macOS or Linux use `:` instead of `;` in the `--add-data` arguments:
+4. Start the desktop app in development mode (uses your running `python -m http.server` on port 8000 if available):
    ```bash
-  pyinstaller --onefile --windowed --icon icons/budget95-icon.ico \
-    --add-data "index.html:." --add-data "app.js:." --add-data "styles.css:." \
-    --add-data "manifest.json:." --add-data "sw.js:." --add-data "icons:icons" \
-    desktop_launcher.py
+   npm run electron:dev
    ```
-4. The bundled app will appear in the `dist/` directory (for example `dist/desktop_launcher.exe`). Place it alongside the included assets or compress the folder to share.
+5. When you’re ready to ship installers, build them with:
+   ```bash
+   npm run electron:build
+   ```
+   The signed output lives in the `release/` folder and includes Windows `.exe` (NSIS installer), macOS `.dmg`, and Linux `.AppImage` packages. Double-click the appropriate file to install without touching the terminal.
 
-### Package for Android and iOS (optional)
+> **Icon tip:** Electron automatically reads the retro icon from `icons/budget95-icon-512x512.base64.txt`. If you need a traditional `.ico` for Windows shortcuts, decode the base64 payload using the snippet in [icons/README](icons/README.md) or any base64-to-ICO converter.
 
-Because Budget Builder 95 is a Progressive Web App, you can generate mobile installers without rewriting any code:
+## 11. Prepare Android/iOS shells with Capacitor
 
-1. Deploy the `index.html`, `app.js`, `styles.css`, `manifest.json`, `sw.js`, and `icons/` folder to a static host (GitHub Pages, Netlify, Vercel, etc.) or expose `python -m http.server` through a tunnel such as [ngrok](https://ngrok.com/).
-2. Visit [PWABuilder](https://www.pwabuilder.com/), paste the hosted URL, and run the manifest/service worker audit (the included files already satisfy the requirements).
-3. Choose **Build My PWA** to download platform packages. PWABuilder produces an Android `.apk`/`.aab` plus an iOS Xcode project that uses the retro icon defined in `manifest.json`.
-4. Follow the generated README to sign and sideload the Android bundle or archive the iOS project for TestFlight/App Store distribution. For personal use you can sideload the unsigned Android build immediately.
-5. Optional: tools such as [Capacitor](https://capacitorjs.com/) or [Expo](https://expo.dev/) can wrap the same web assets if you prefer maintaining native projects by hand.
+Prefer native launchers on your phone? The included Capacitor configuration wraps the same `dist/` bundle:
 
-## 10. Stop the server and exit the environment
+1. Ensure Node.js dependencies are installed (`npm install`).
+2. Generate fresh web assets:
+   ```bash
+   npm run prepare:web
+   ```
+3. Sync Capacitor (creates the `android/` and `ios/` projects on first run):
+   ```bash
+   npm run cap:init
+   ```
+4. Open the native projects in their respective IDEs:
+   ```bash
+   npm run cap:open:android   # opens Android Studio for APK/AAB generation
+   npm run cap:open:ios       # opens Xcode for iOS builds/TestFlight
+   ```
+5. From Android Studio or Xcode you can build signed releases, deploy to emulators, or sideload directly to your devices. Capacitor copies the retro icon and manifest metadata automatically—update `capacitor.config.json` if you want a different app name or bundle identifier.
+
+> **Quick alternative:** PWABuilder still works great if you prefer a web-only workflow. Point it at a hosted version of the app to download ready-made store bundles without maintaining native projects locally.
+
+## 12. Stop the server and exit the environment
 - To stop the server, return to the terminal running `python -m http.server` and press `Ctrl + C`.
 - To leave the virtual environment, type:
   ```bash
@@ -221,7 +213,7 @@ Because Budget Builder 95 is a Progressive Web App, you can generate mobile inst
 
 ---
 
-## 11. Customize or explore further
+## 13. Customize or explore further
 - Open `index.html`, `styles.css`, or `app.js` in your favorite code editor to tweak the layout, styling, or logic.
 - Refresh the browser page after saving your changes to see the updates.
 
