@@ -9,7 +9,7 @@
     "prepare:web": "node scripts/prepare-web.js",
     "electron:dev": "npm run prepare:web && electron .",
     "electron:serve": "npm run electron:dev",
-    "electron:build": "npm run prepare:web && electron-builder",
+    "electron:build": "node scripts/build-desktop.js",
     "package:desktop": "npm run electron:build",
     "cap:init": "npm run prepare:web && npx cap sync",
     "cap:add:android": "npm run prepare:web && npx cap add android",

@@ -185,7 +185,7 @@ Use the bundled Electron configuration to generate `.exe`, `.dmg`, and `.AppImag
    ```bash
    npm run package:desktop
    ```
-   Electron Builder places the output in the `release/` folder and produces Windows `.exe` (NSIS installer), macOS `.dmg`, and Linux `.AppImage` artifacts. Double-click the file that matches your platform to install Budget Builder 95 permanently.
+   The build script now generates a timestamped subfolder inside `release/` (for example `release/20241017161230/`) before invoking Electron Builder. This prevents Windows Defender and other antivirus tools from locking a previously generated installer, which was the source of the "output file is locked for writing" stalls. Inside that subfolder you’ll find the Windows `.exe` (NSIS installer), macOS `.dmg`, and Linux `.AppImage` artifacts ready to install.
 
 > **Icon tip:** `npm run prepare:web` copies whatever you place in `icons/` into `dist/icons/` and refuses to continue if the required files are missing. This protects you from building an installer without artwork.
 
