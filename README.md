@@ -170,23 +170,24 @@ If you’d rather double-click an app icon without running commands every time, 
 Use the bundled Electron configuration to generate `.exe`, `.dmg`, and `.AppImage` builds that run without a browser:
 
 1. Install [Node.js](https://nodejs.org/) (version 18 or newer is recommended).
-2. Inside the project folder run:
+2. **Add your own icon files** to the `icons/` folder following the table in `icons/README.md` (minimum: `budget95.ico`, `budget95.icns`, `budget95-512.png`). These files are required for packaging but are not tracked in git so you can ship your personal artwork.
+3. Inside the project folder run:
    ```bash
    npm install
    ```
    This installs Electron, electron-builder, and the Capacitor toolchain.
-3. To preview the desktop shell (optional) launch the development build:
+4. To preview the desktop shell (optional) launch the development build:
    ```bash
    npm run electron:dev
    ```
    The window falls back to the packaged assets automatically if you are not running `python -m http.server`.
-4. Create installable packages with:
+5. Create installable packages with:
    ```bash
    npm run package:desktop
    ```
    Electron Builder places the output in the `release/` folder and produces Windows `.exe` (NSIS installer), macOS `.dmg`, and Linux `.AppImage` artifacts. Double-click the file that matches your platform to install Budget Builder 95 permanently.
 
-> **Icon tip:** `npm run prepare:web` now decodes the base64 icon payloads and writes `.png`, `.ico`, and `.icns` variants to `dist/icons/`. Use those generated files for custom shortcuts or packaging tweaks.
+> **Icon tip:** `npm run prepare:web` copies whatever you place in `icons/` into `dist/icons/` and refuses to continue if the required files are missing. This protects you from building an installer without artwork.
 
 ## 11. Package Android and iOS builds with Capacitor
 

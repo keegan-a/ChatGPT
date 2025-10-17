@@ -1,20 +1,6 @@
 #!/usr/bin/env node
 const { promises: fs } = require('fs');
 const path = require('path');
-let pngToIco = null;
-let iconGen = null;
-
-try {
-  pngToIco = require('png-to-ico');
-} catch (error) {
-  console.warn('png-to-ico is not available; ICO generation will be skipped.');
-}
-
-try {
-  iconGen = require('icon-gen');
-} catch (error) {
-  console.warn('icon-gen is not available; ICNS generation will be skipped.');
-}
 
 const root = process.cwd();
 const dist = path.join(root, 'dist');
@@ -25,61 +11,54 @@ const sources = [
   'app.js',
   'manifest.json',
   'sw.js',
-  'icons',
   'README.md'
 ];
 
-const BASE64_ICONS = [
-  { name: 'budget95-icon-64', file: 'budget95-icon-64x64.base64.txt' },
-  { name: 'budget95-icon-192', file: 'budget95-icon-192x192.base64.txt' },
-  { name: 'budget95-icon-512', file: 'budget95-icon-512x512.base64.txt' },
+const REQUIRED_ICON_FILES = [
+  'budget95.ico',
+  'budget95.icns',
+  'budget95-512.png'
 ];
 
-async function decodeIconPayloads() {
+async function copyIcons() {
+  const srcIconsDir = path.join(root, 'icons');
   const distIconsDir = path.join(dist, 'icons');
+
+  try {
+    const stat = await fs.stat(srcIconsDir);
+    if (!stat.isDirectory()) {
+      throw new Error('icons path is not a directory');
+    }
+  } catch (error) {
+    throw new Error('Missing icons directory. Add your icon files to ./icons before packaging.');
+  }
+
   await fs.mkdir(distIconsDir, { recursive: true });
 
-  const generatedPngs = [];
+  const entries = await fs.readdir(srcIconsDir);
+  await Promise.all(entries.map(async (entry) => {
+    const src = path.join(srcIconsDir, entry);
+    const dest = path.join(distIconsDir, entry);
+    const stat = await fs.stat(src);
+    if (stat.isFile()) {
+      await fs.copyFile(src, dest);
+    }
+  }));
 
-  for (const icon of BASE64_ICONS) {
-    const sourcePath = path.join(root, 'icons', icon.file);
-    const targetPath = path.join(distIconsDir, `${icon.name}.png`);
+  const missing = [];
+  for (const file of REQUIRED_ICON_FILES) {
     try {
-      const raw = await fs.readFile(sourcePath, 'utf8');
-      const trimmed = raw.trim();
-      const base64 = trimmed.includes(',') ? trimmed.split(',').pop() : trimmed;
-      const buffer = Buffer.from(base64, 'base64');
-      await fs.writeFile(targetPath, buffer);
-      generatedPngs.push(targetPath);
+      const stat = await fs.stat(path.join(distIconsDir, file));
+      if (!stat.isFile()) {
+        missing.push(file);
+      }
     } catch (error) {
-      console.warn(`Unable to decode icon payload ${icon.file}:`, error);
+      missing.push(file);
     }
   }
 
-  if (!generatedPngs.length) {
-    return;
-  }
-
-  if (pngToIco) {
-    const icoPath = path.join(distIconsDir, 'budget95.ico');
-    try {
-      const icoBuffer = await pngToIco(generatedPngs);
-      await fs.writeFile(icoPath, icoBuffer);
-    } catch (error) {
-      console.warn('Unable to generate ICO icon:', error);
-    }
-  }
-
-  if (iconGen) {
-    try {
-      await iconGen(generatedPngs[generatedPngs.length - 1], distIconsDir, {
-        report: false,
-        modes: ['icns'],
-        names: { icns: 'budget95' },
-      });
-    } catch (error) {
-      console.warn('Unable to generate ICNS icon:', error);
-    }
+  if (missing.length) {
+    throw new Error(`Missing required icon assets: ${missing.join(', ')}. Place the files in ./icons before running packaging commands.`);
   }
 }
 
@@ -116,7 +95,7 @@ async function copySource(srcRelative) {
     for (const item of sources) {
       await copySource(item);
     }
-    await decodeIconPayloads();
+    await copyIcons();
     console.log('Web assets prepared in dist/');
   } catch (error) {
     console.error('Failed to prepare web assets:', error);

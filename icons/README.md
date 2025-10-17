@@ -1,15 +1,23 @@
 # Icon assets
 
-The retro desktop icon set still ships as base64 text so the repository remains binary-free. The build pipeline now decodes those payloads automatically:
+To keep the repository binary-free while still enabling native packaging, provide your own icon artwork before running any Electron or Capacitor build commands.
+
+Place the following files inside this directory:
+
+| File name | Purpose | Suggested size |
+|-----------|---------|----------------|
+| `budget95.ico` | Windows installer/shortcut icon | Multi-resolution (include 16/32/48/256 within the ICO) |
+| `budget95.icns` | macOS installer/dock icon | Multi-resolution ICNS |
+| `budget95-512.png` | Base PNG used for Linux launchers and as a fallback | 512×512 transparent PNG |
+
+Additional PNG sizes (e.g., 192×192, 128×128) are welcome; everything in this folder is copied into `dist/icons/` during the build.
+
+> **Tip:** You can export these formats from design tools such as Figma, Affinity Designer, or Photoshop. Online converters like [icoconvert.com](https://icoconvert.com/) can transform a 512×512 PNG into `.ico` and `.icns` files if your editor does not export them directly.
+
+Once the files are in place, run:
 
 ```bash
 npm run prepare:web
 ```
 
-Running the command above creates PNG, ICO, and ICNS variants inside `dist/icons/`, which Electron Builder and Capacitor consume when generating installers. If you need to generate files manually (for example, to preview artwork), you can decode one of the base64 files yourself:
-
-```bash
-node -e "const fs=require('fs');const data=fs.readFileSync('icons/budget95-icon-512x512.base64.txt','utf8').trim();const base64=data.includes(',')?data.split(',').pop():data;fs.writeFileSync('icons/budget95-icon-512.png',Buffer.from(base64,'base64'));console.log('Saved icons/budget95-icon-512.png');"
-```
-
-From there you may use tooling such as ImageMagick or online converters to create alternative formats, but the automated `prepare:web` step already produces the assets required for packaging.
+The packaging commands (`npm run package:desktop`, `npm run package:android`, `npm run package:ios`) depend on the presence of these files. The script halts with a clear error if anything is missing, so you will never accidentally ship an installer without artwork.
