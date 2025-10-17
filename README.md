@@ -91,6 +91,8 @@ You now have access to:
 - A budget health gauge that shows how much of your income the plan is consuming.
 - The Spending Mapper window for manual or AI-assisted transaction imports.
 - Desktop icons that open Classic Snake or the AI co-pilot, mirroring a vintage OS desktop.
+- The Financial Journal window for daily/weekly/monthly accountability and notes that sync with the AI assistant.
+- Configurable OpenAI models plus encrypted API-key storage with unlock controls.
 
 ---
 
@@ -116,10 +118,17 @@ You now have access to:
 
 - Open the **Spending Mapper** from Start → Data tools to paste plain-text statements or upload one or more screenshots and/or bank-statement PDFs.
 - Manual lines work best in the format `Category - Amount - cadence`. Supported cadences include daily, weekly, monthly, biweekly (converted to weekly), and yearly (converted to monthly).
-- To try AI assistance, paste (or restore) an OpenAI API key, load your files, fine-tune the **Analysis focus** field if you want extra guidance, and click **Analyze with AI**. You can optionally enable **Remember this key on this device** to keep the key in local storage for future sessions—use the **Forget saved key** button to clear it at any time.
+- To try AI assistance, paste (or restore) an OpenAI API key, load your files, fine-tune the **Analysis focus** field if you want extra guidance, and click **Analyze with AI**. When you enable **Remember this key on this device**, add a passphrase so the key is encrypted locally; use **Unlock saved key** with the same passphrase or **Forget saved key** to remove it.
+- Pick the GPT model that suits your needs (for example GPT-4o for the richest analysis or GPT-4o mini for faster iterations) from the mapper panel or Start menu.
 - The default prompt now asks the model to read every transaction, call out subscriptions like Adobe Creative Cloud by name, and infer cadence from how often a merchant appears. Add your own instructions in the field to emphasize edge cases or budgeting priorities.
 - The analyzer can ingest multiple files at once. Images are sent directly to OpenAI, while PDFs are text-parsed locally via [pdf.js](https://mozilla.github.io/pdf.js/) before the excerpts are included in the request. A live internet connection is required for both the pdf.js loader and the OpenAI request; if either step fails you can still use manual entry.
 - Map detected entries to existing categories or create new ones, then apply them individually or all at once.
+
+### Financial journal & accountability
+
+- Open the **Financial Journal** window to log daily victories, impulse purchases, or reflections. Switch between daily, weekly, and monthly scopes and click any calendar day to focus it.
+- Journal entries autosave alongside your budget and appear in the right-hand list for quick editing or deletion.
+- The AI mapper and co-pilot automatically consider recent journal entries, helping the model distinguish recurring habits from one-off events when it suggests budget tweaks.
 
 ### AI Budget Co-Pilot
 
@@ -177,7 +186,7 @@ Use the bundled Electron configuration to generate `.exe`, `.dmg`, and `.AppImag
    ```
    Electron Builder places the output in the `release/` folder and produces Windows `.exe` (NSIS installer), macOS `.dmg`, and Linux `.AppImage` artifacts. Double-click the file that matches your platform to install Budget Builder 95 permanently.
 
-> **Icon tip:** Electron automatically reads the retro icon from `icons/budget95-icon-512x512.base64.txt`. If you need a traditional `.ico` for Windows shortcuts, decode the base64 payload using the snippet in [icons/README](icons/README.md) or any base64-to-ICO converter.
+> **Icon tip:** `npm run prepare:web` now decodes the base64 icon payloads and writes `.png`, `.ico`, and `.icns` variants to `dist/icons/`. Use those generated files for custom shortcuts or packaging tweaks.
 
 ## 11. Package Android and iOS builds with Capacitor
 

@@ -35,15 +35,23 @@
           <span class="desktop-icon__glyph" aria-hidden="true">🐍</span>
           <span class="desktop-icon__label">Snake</span>
         </button>
-        <button
-          type="button"
-          class="desktop-icon"
-          data-open-window="assistant"
-        >
-          <span class="desktop-icon__glyph" aria-hidden="true">🤖</span>
-          <span class="desktop-icon__label">AI Co-Pilot</span>
-        </button>
-      </nav>
+      <button
+        type="button"
+        class="desktop-icon"
+        data-open-window="assistant"
+      >
+        <span class="desktop-icon__glyph" aria-hidden="true">🤖</span>
+        <span class="desktop-icon__label">AI Co-Pilot</span>
+      </button>
+      <button
+        type="button"
+        class="desktop-icon"
+        data-open-window="calendar"
+      >
+        <span class="desktop-icon__glyph" aria-hidden="true">📅</span>
+        <span class="desktop-icon__label">Journal</span>
+      </button>
+    </nav>
       <section
         class="panel window panel-income"
         aria-labelledby="panelIncomeTitle"
@@ -414,6 +422,16 @@
               API key
               <input type="password" id="mapperApiKey" autocomplete="off" placeholder="sk-..." />
             </label>
+            <label class="mapper-field">
+              Encryption passphrase
+              <input
+                type="password"
+                id="mapperPassphrase"
+                autocomplete="new-password"
+                placeholder="Create a passphrase to protect your key"
+              />
+              <span class="mapper-hint">Required to unlock remembered keys. Passphrases never leave this device.</span>
+            </label>
             <label class="mapper-remember">
               <input type="checkbox" id="mapperRememberKey" />
               Remember this key on this device
@@ -421,6 +439,16 @@
             <button type="button" class="btn-tertiary mapper-clear-key" id="mapperForgetKey">
               Forget saved key
             </button>
+            <button type="button" class="btn-tertiary mapper-unlock-key" id="mapperUnlockKey">
+              Unlock saved key
+            </button>
+            <label class="mapper-field">
+              Preferred OpenAI model
+              <select id="mapperModel">
+                <option value="gpt-4o">GPT-4o (most capable)</option>
+                <option value="gpt-4o-mini">GPT-4o mini (faster)</option>
+              </select>
+            </label>
             <label class="mapper-field">
               Statements
               <input
@@ -477,6 +505,112 @@
               </table>
             </div>
           </div>
+        </div>
+      </section>
+      <section
+        class="panel window panel-calendar hidden-window"
+        aria-labelledby="panelCalendarTitle"
+        data-window-id="calendar"
+        data-window-title="Financial Journal"
+        data-initial-state="closed"
+        data-width="620"
+        data-height="620"
+        data-min-width="420"
+        data-min-height="420"
+        data-x="360"
+        data-y="160"
+      >
+        <header class="window-header" data-drag-handle>
+          <h2 class="window-title" id="panelCalendarTitle">Financial Journal</h2>
+          <div class="window-controls">
+            <button
+              class="window-control"
+              data-window-action="minimize"
+              type="button"
+              title="Minimize window"
+              aria-label="Minimize window"
+            >
+              <span class="window-control__icon" aria-hidden="true">–</span>
+              <span class="visually-hidden">Minimize Financial Journal window</span>
+            </button>
+            <button
+              class="window-control"
+              data-window-action="maximize"
+              type="button"
+              title="Maximize window"
+              aria-label="Maximize window"
+            >
+              <span class="window-control__icon" aria-hidden="true">▢</span>
+              <span class="visually-hidden">Maximize Financial Journal window</span>
+            </button>
+            <button
+              class="window-control"
+              data-window-action="close"
+              type="button"
+              title="Close window"
+              aria-label="Close window"
+            >
+              <span class="window-control__icon" aria-hidden="true">✕</span>
+              <span class="visually-hidden">Close Financial Journal window</span>
+            </button>
+          </div>
+        </header>
+        <div class="window-body calendar-body">
+          <p class="calendar-lead">
+            Track purchases, wins, and financial feelings. Entries sync with the co-pilot so advice reflects your real habits.
+          </p>
+          <div class="calendar-controls">
+            <label class="calendar-field">
+              View
+              <select id="calendarView">
+                <option value="monthly" selected>Monthly</option>
+                <option value="weekly">Weekly</option>
+                <option value="daily">Daily</option>
+              </select>
+            </label>
+            <label class="calendar-field">
+              Focus date
+              <input type="date" id="calendarDate" />
+            </label>
+            <button type="button" class="btn-secondary" id="calendarNewEntry">New entry</button>
+          </div>
+          <div class="calendar-layout">
+            <div class="calendar-grid" id="calendarGrid" role="grid" aria-describedby="panelCalendarTitle"></div>
+            <section class="calendar-entries" aria-label="Journal entries">
+              <header class="calendar-entries__header">
+                <h3>Entries</h3>
+                <span class="calendar-entries__summary" id="calendarSummary"></span>
+              </header>
+              <div class="calendar-entries__list" id="calendarEntries" role="list"></div>
+            </section>
+          </div>
+          <form class="calendar-form" id="calendarEntryForm" autocomplete="off">
+            <input type="hidden" id="calendarEntryId" />
+            <h3 class="calendar-form__title">Log spending moment</h3>
+            <div class="calendar-form__grid">
+              <label>
+                Date
+                <input type="date" id="calendarEntryDate" required />
+              </label>
+              <label>
+                Title
+                <input type="text" id="calendarEntryTitle" placeholder="What happened?" required />
+              </label>
+              <label>
+                Amount ($)
+                <input type="number" id="calendarEntryAmount" min="0" step="0.01" required />
+              </label>
+              <label class="full">
+                Notes / feelings
+                <textarea id="calendarEntryNotes" rows="3" placeholder="Wins, worries, or context"></textarea>
+              </label>
+            </div>
+            <div class="calendar-form__actions">
+              <button type="submit" class="btn-secondary" id="calendarSaveEntry">Save entry</button>
+              <button type="button" class="btn-tertiary" id="calendarCancelEdit">Cancel</button>
+            </div>
+          </form>
+          <div class="calendar-status" id="calendarStatus" role="status" aria-live="polite"></div>
         </div>
       </section>
       <section
@@ -739,6 +873,9 @@
           <button class="start-menu__item" data-open-window="snake">
             🐍 Classic Snake
           </button>
+          <button class="start-menu__item" data-open-window="calendar">
+            📅 Financial Journal
+          </button>
           <button class="start-menu__item" data-activate-screensaver>
             🌀 Launch 3D Pipes Screensaver
           </button>
@@ -754,6 +891,13 @@
           <button class="start-menu__item" data-open-window="assistant">
             🤖 Budget AI Co-Pilot
           </button>
+          <div class="start-menu__item start-menu__item--inline">
+            <label for="startModelSelect">AI model</label>
+            <select id="startModelSelect">
+              <option value="gpt-4o">GPT-4o</option>
+              <option value="gpt-4o-mini">GPT-4o mini</option>
+            </select>
+          </div>
           <button class="start-menu__item" data-action="cascade-windows">
             🪟 Cascade all windows
           </button>

@@ -1,11 +1,15 @@
 # Icon assets
 
-The retro desktop icon set ships as base64 text so the repository remains binary-free. Decode the file you need before packaging:
+The retro desktop icon set still ships as base64 text so the repository remains binary-free. The build pipeline now decodes those payloads automatically:
 
 ```bash
-node -e "const fs=require('fs');const path='icons/budget95-icon-512x512.base64.txt';const data=fs.readFileSync(path,'utf8').trim();const buf=Buffer.from(data,'base64');fs.writeFileSync('icons/budget95-icon-512.png',buf);console.log('Wrote icons/budget95-icon-512.png');"
+npm run prepare:web
 ```
 
-On Windows you can then turn the PNG into an `.ico` with free tools such as [IcoMoon](https://icomoon.io/app) or [convertico.com](https://convertico.com/). On macOS/Linux, `magick budget95-icon-512.png budget95-icon.ico` works if you have ImageMagick installed.
+Running the command above creates PNG, ICO, and ICNS variants inside `dist/icons/`, which Electron Builder and Capacitor consume when generating installers. If you need to generate files manually (for example, to preview artwork), you can decode one of the base64 files yourself:
 
-The Electron packaging step reads the base64 file directly, so decoding is only necessary if you need a standalone PNG/ICO.
+```bash
+node -e "const fs=require('fs');const data=fs.readFileSync('icons/budget95-icon-512x512.base64.txt','utf8').trim();const base64=data.includes(',')?data.split(',').pop():data;fs.writeFileSync('icons/budget95-icon-512.png',Buffer.from(base64,'base64'));console.log('Saved icons/budget95-icon-512.png');"
+```
+
+From there you may use tooling such as ImageMagick or online converters to create alternative formats, but the automated `prepare:web` step already produces the assets required for packaging.

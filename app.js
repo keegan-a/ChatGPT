@@ -29,6 +29,7 @@ const resetBlueprintButton = document.querySelector('#resetBlueprint');
 const autoThemeToggle = document.querySelector('#autoThemeToggle');
 const budgetHealthContainer = document.querySelector('#budgetHealth');
 const mapperApiKeyInput = document.querySelector('#mapperApiKey');
+const mapperPassphraseInput = document.querySelector('#mapperPassphrase');
 const mapperFileInput = document.querySelector('#mapperFile');
 const mapperAnalyzeBtn = document.querySelector('#mapperAnalyzeBtn');
 const mapperManualInput = document.querySelector('#mapperManualInput');
@@ -41,6 +42,8 @@ const mapperRowTemplate = document.querySelector('#mapperRowTemplate');
 const mapperAiNotice = document.querySelector('#mapperAiNotice');
 const mapperRememberToggle = document.querySelector('#mapperRememberKey');
 const mapperForgetKeyBtn = document.querySelector('#mapperForgetKey');
+const mapperUnlockKeyBtn = document.querySelector('#mapperUnlockKey');
+const mapperModelSelect = document.querySelector('#mapperModel');
 const startFocusToggle = document.querySelector('[data-action="toggle-focus"]');
 const mapperPromptInput = document.querySelector('#mapperPrompt');
 const assistantLog = document.querySelector('#assistantLog');
@@ -49,6 +52,21 @@ const assistantMessageInput = document.querySelector('#assistantMessage');
 const assistantResetBtn = document.querySelector('#assistantReset');
 const assistantStatus = document.querySelector('#assistantStatus');
 const desktopIconsContainer = document.querySelector('.desktop-icons');
+const startModelSelect = document.querySelector('#startModelSelect');
+const calendarViewSelect = document.querySelector('#calendarView');
+const calendarDateInput = document.querySelector('#calendarDate');
+const calendarGrid = document.querySelector('#calendarGrid');
+const calendarEntriesList = document.querySelector('#calendarEntries');
+const calendarSummary = document.querySelector('#calendarSummary');
+const calendarForm = document.querySelector('#calendarEntryForm');
+const calendarEntryIdInput = document.querySelector('#calendarEntryId');
+const calendarEntryDateInput = document.querySelector('#calendarEntryDate');
+const calendarEntryTitleInput = document.querySelector('#calendarEntryTitle');
+const calendarEntryAmountInput = document.querySelector('#calendarEntryAmount');
+const calendarEntryNotesInput = document.querySelector('#calendarEntryNotes');
+const calendarStatus = document.querySelector('#calendarStatus');
+const calendarNewEntryBtn = document.querySelector('#calendarNewEntry');
+const calendarCancelEditBtn = document.querySelector('#calendarCancelEdit');
 const body = document.body;
 
 const scopeFactors = {
@@ -89,11 +107,23 @@ const themeTaglines = {
 const entryFrequencies = ['daily', 'weekly', 'monthly'];
 
 const scopeOrder = ['daily', 'weekly', 'monthly', 'yearly'];
-const STORAGE_KEY = 'budget-builder-95-state-v3';
-const MAPPER_KEY_STORAGE = 'budget-builder-95-openai-key';
+const STORAGE_KEY = 'budget-builder-95-state-v4';
+const MAPPER_KEY_STORAGE = 'budget-builder-95-openai-key-v2';
 const MAPPER_PROMPT_STORAGE = 'budget-builder-95-openai-instructions';
+const MAPPER_SESSION_PASSPHRASE = 'budget-builder-95-openai-session-passphrase';
+const OPENAI_MODEL_STORAGE = 'budget-builder-95-openai-model';
+
+const OPENAI_MODELS = [
+  { id: 'gpt-4o', label: 'GPT-4o', maxChars: 12000 },
+  { id: 'gpt-4o-mini', label: 'GPT-4o mini', maxChars: 8000 },
+];
+
+const DEFAULT_OPENAI_MODEL = 'gpt-4o';
 
 const themeSequence = ['win95', 'xp', 'vista', 'mac'];
+
+const CALENDAR_VIEWS = ['daily', 'weekly', 'monthly'];
+const JOURNAL_ENTRY_PREFIX = 'journal-entry';
 
 const DEFAULT_MAPPER_PROMPT = [
   'Review every transaction that appears in the provided screenshots or PDF excerpts.',
@@ -125,12 +155,126 @@ const futureHorizons = [
   { label: '5 Years', weeks: 260 },
 ];
 
+function buildBudgetContextSummary() {
+  if (!state.categories.length) {
+    return '';
+  }
+  const totalWeekly = state.categories.reduce((sum, category) => sum + category.weeklyAmount, 0);
+  const leftoverWeekly = state.weeklyIncome - totalWeekly;
+  const savingsRate = state.weeklyIncome > 0 ? (leftoverWeekly / state.weeklyIncome) * 100 : 0;
+  const topCategories = [...state.categories]
+    .sort((a, b) => b.weeklyAmount - a.weeklyAmount)
+    .slice(0, 5)
+    .map(
+      (category) =>
+        `- ${category.name}: ${formatCurrency(category.weeklyAmount)} weekly (${formatCurrency(
+          convertFromWeekly(category.weeklyAmount, 'monthly')
+        )} monthly)`
+    );
+  return [
+    `Weekly income ${formatCurrency(state.weeklyIncome)} with planned spending ${formatCurrency(totalWeekly)} (${(state.weeklyIncome === 0 ? 0 : (totalWeekly / state.weeklyIncome) * 100).toFixed(1)}% of income).`,
+    `Expected surplus ${formatCurrency(leftoverWeekly)} each week (${savingsRate.toFixed(1)}% savings rate).`,
+    'Top categories:\n' + topCategories.join('\n'),
+  ].join('\n');
+}
+
+function buildJournalContextSummary() {
+  if (!state.journalEntries.length) {
+    return '';
+  }
+  const sorted = [...state.journalEntries].sort((a, b) => b.date.localeCompare(a.date));
+  const recentWindow = addDays(new Date(), -30);
+  const recentTotals = sorted.reduce(
+    (acc, entry) => {
+      if (!isValidISODate(entry.date)) return acc;
+      const entryDate = new Date(entry.date);
+      if (entryDate >= recentWindow) {
+        acc.count += 1;
+        acc.total += Number.isFinite(entry.amount) ? entry.amount : 0;
+      }
+      return acc;
+    },
+    { count: 0, total: 0 }
+  );
+  const recentLines = sorted.slice(0, 5).map((entry) => {
+    const note = entry.notes ? ` — ${entry.notes.slice(0, 80)}` : '';
+    return `- ${entry.date}: ${formatCurrency(entry.amount || 0)} — ${entry.title}${note}`;
+  });
+  return [
+    `Journal captures ${state.journalEntries.length} entries; last 30 days include ${recentTotals.count} totaling ${formatCurrency(recentTotals.total)}.`,
+    'Most recent activity:\n' + recentLines.join('\n'),
+  ].join('\n');
+}
+
+function buildPersonalContext() {
+  const segments = [];
+  const budgetSummary = buildBudgetContextSummary();
+  if (budgetSummary) {
+    segments.push(budgetSummary);
+  }
+  const journalSummary = buildJournalContextSummary();
+  if (journalSummary) {
+    segments.push(journalSummary);
+  }
+  return segments.join('\n\n');
+}
+
 function sanitizeScope(scope) {
   return scopeOrder.includes(scope) ? scope : 'daily';
 }
 
 function sanitizeFrequency(frequency) {
   return entryFrequencies.includes(frequency) ? frequency : 'weekly';
+}
+
+function sanitizeCalendarView(view) {
+  return CALENDAR_VIEWS.includes(view) ? view : 'monthly';
+}
+
+function isValidISODate(value) {
+  if (typeof value !== 'string') {
+    return false;
+  }
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return false;
+  }
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) {
+    return false;
+  }
+  return date.toISOString().slice(0, 10) === value;
+}
+
+function toISODate(date) {
+  if (!(date instanceof Date)) {
+    return '';
+  }
+  return date.toISOString().slice(0, 10);
+}
+
+function startOfMonth(date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function startOfWeek(date) {
+  const result = new Date(date);
+  const day = result.getDay();
+  result.setDate(result.getDate() - day);
+  result.setHours(0, 0, 0, 0);
+  return result;
+}
+
+function endOfWeek(date) {
+  const result = startOfWeek(date);
+  result.setDate(result.getDate() + 6);
+  return result;
+}
+
+function addDays(date, amount) {
+  const result = new Date(date);
+  result.setDate(result.getDate() + amount);
+  return result;
 }
 
 function normalizePersistedCategory(category, fallbackId) {
@@ -170,6 +314,29 @@ function normalizePersistedCategory(category, fallbackId) {
   };
 }
 
+function normalizeJournalEntry(entry, index) {
+  if (!entry || typeof entry !== 'object') {
+    return null;
+  }
+  const id =
+    typeof entry.id === 'string' && entry.id.trim()
+      ? entry.id.trim()
+      : `${JOURNAL_ENTRY_PREFIX}-${index}`;
+  const date = isValidISODate(entry.date) ? entry.date : null;
+  const title = typeof entry.title === 'string' ? entry.title.trim() : '';
+  if (!date || !title) {
+    return null;
+  }
+  const amount = Number.parseFloat(entry.amount);
+  return {
+    id,
+    date,
+    title,
+    amount: Number.isFinite(amount) && amount > 0 ? amount : 0,
+    notes: typeof entry.notes === 'string' ? entry.notes.trim() : '',
+  };
+}
+
 function loadPersistedState() {
   if (!('localStorage' in window)) {
     return null;
@@ -188,12 +355,18 @@ function loadPersistedState() {
           .map((category, index) => normalizePersistedCategory(category, index))
           .filter(Boolean)
       : [];
+    const journalEntries = Array.isArray(parsed.journalEntries)
+      ? parsed.journalEntries.map((entry, index) => normalizeJournalEntry(entry, index)).filter(Boolean)
+      : [];
+    const model = OPENAI_MODELS.find((item) => item.id === parsed.aiModel)?.id || undefined;
     return {
       weeklyIncome: Number.isFinite(parsed.weeklyIncome) ? parsed.weeklyIncome : undefined,
       scope: sanitizeScope(parsed.scope),
       theme: themeClassMap[parsed.theme] ? parsed.theme : undefined,
       autoThemeCycle: Boolean(parsed.autoThemeCycle),
       categories,
+      journalEntries,
+      aiModel: model,
     };
   } catch (error) {
     console.warn('Unable to load saved budget state:', error);
@@ -222,6 +395,14 @@ function persistState() {
         recommended: category.recommended,
         customized: category.customized,
       })),
+      journalEntries: state.journalEntries.map((entry) => ({
+        id: entry.id,
+        date: entry.date,
+        title: entry.title,
+        amount: entry.amount,
+        notes: entry.notes,
+      })),
+      aiModel: state.aiModel,
     };
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
   } catch (error) {
@@ -239,34 +420,228 @@ function scheduleStateSave() {
   }, 350);
 }
 
-function getStoredMapperKey() {
+function arrayBufferToBase64(buffer) {
+  return btoa(String.fromCharCode(...new Uint8Array(buffer)));
+}
+
+function base64ToArrayBuffer(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
+function getStoredMapperRecord() {
   if (!('localStorage' in window)) {
-    return '';
+    return null;
   }
   try {
-    const encoded = window.localStorage.getItem(MAPPER_KEY_STORAGE);
-    if (!encoded) {
-      return '';
+    const raw = window.localStorage.getItem(MAPPER_KEY_STORAGE);
+    if (!raw) {
+      return null;
     }
-    return atob(encoded);
+    const record = JSON.parse(raw);
+    if (!record || typeof record !== 'object') {
+      return null;
+    }
+    return record;
   } catch (error) {
-    console.warn('Unable to read stored API key:', error);
-    return '';
+    console.warn('Unable to read stored API key metadata:', error);
+    return null;
   }
 }
 
-function persistMapperKey(key) {
+function hasStoredMapperKey() {
+  const record = getStoredMapperRecord();
+  return Boolean(record && (record.data || record.cipher));
+}
+
+async function encryptMapperKey(key, passphrase) {
+  if (!key) {
+    return null;
+  }
+  const supportsCrypto = Boolean(window.crypto?.subtle);
+  if (!supportsCrypto || !passphrase) {
+    return { version: 1, encrypted: false, data: btoa(key) };
+  }
+  const encoder = new TextEncoder();
+  const salt = window.crypto.getRandomValues(new Uint8Array(16));
+  const iv = window.crypto.getRandomValues(new Uint8Array(12));
+  const baseKey = await window.crypto.subtle.importKey(
+    'raw',
+    encoder.encode(passphrase),
+    'PBKDF2',
+    false,
+    ['deriveKey']
+  );
+  const derivedKey = await window.crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: 150000, hash: 'SHA-256' },
+    baseKey,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt']
+  );
+  const cipherBuffer = await window.crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    derivedKey,
+    encoder.encode(key)
+  );
+  return {
+    version: 1,
+    encrypted: true,
+    salt: arrayBufferToBase64(salt.buffer || salt),
+    iv: arrayBufferToBase64(iv.buffer || iv),
+    data: arrayBufferToBase64(cipherBuffer),
+  };
+}
+
+async function decryptMapperKey(record, passphrase) {
+  if (!record) {
+    return '';
+  }
+  if (!record.encrypted) {
+    try {
+      return atob(record.data || '');
+    } catch (error) {
+      throw new Error('Saved key could not be decoded.');
+    }
+  }
+  if (!passphrase) {
+    throw new Error('Enter the passphrase used when saving the key.');
+  }
+  if (!window.crypto?.subtle) {
+    throw new Error('This browser cannot decrypt the stored key. Try another device.');
+  }
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+  const salt = base64ToArrayBuffer(record.salt);
+  const iv = base64ToArrayBuffer(record.iv);
+  const cipher = base64ToArrayBuffer(record.data);
+  const baseKey = await window.crypto.subtle.importKey('raw', encoder.encode(passphrase), 'PBKDF2', false, [
+    'deriveKey',
+  ]);
+  const derivedKey = await window.crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt: new Uint8Array(salt), iterations: 150000, hash: 'SHA-256' },
+    baseKey,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['decrypt']
+  );
+  const plainBuffer = await window.crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: new Uint8Array(iv) },
+    derivedKey,
+    cipher
+  );
+  return decoder.decode(plainBuffer);
+}
+
+async function persistMapperKey(key, passphrase) {
   if (!('localStorage' in window)) {
     return;
   }
   try {
     if (key) {
-      window.localStorage.setItem(MAPPER_KEY_STORAGE, btoa(key));
+      const record = await encryptMapperKey(key, passphrase);
+      if (!record) return;
+      window.localStorage.setItem(MAPPER_KEY_STORAGE, JSON.stringify(record));
+      if (passphrase && window.sessionStorage) {
+        window.sessionStorage.setItem(MAPPER_SESSION_PASSPHRASE, passphrase);
+      }
     } else {
       window.localStorage.removeItem(MAPPER_KEY_STORAGE);
+      if (window.sessionStorage) {
+        window.sessionStorage.removeItem(MAPPER_SESSION_PASSPHRASE);
+      }
     }
   } catch (error) {
     console.warn('Unable to store API key preference:', error);
+    throw error;
+  }
+}
+
+function clearStoredMapperKey() {
+  if (!('localStorage' in window)) {
+    return;
+  }
+  try {
+    window.localStorage.removeItem(MAPPER_KEY_STORAGE);
+    if (window.sessionStorage) {
+      window.sessionStorage.removeItem(MAPPER_SESSION_PASSPHRASE);
+    }
+  } catch (error) {
+    console.warn('Unable to clear stored API key:', error);
+  }
+}
+
+function getActiveModelInfo() {
+  const fallback = OPENAI_MODELS.find((item) => item.id === DEFAULT_OPENAI_MODEL) || OPENAI_MODELS[0];
+  const match = OPENAI_MODELS.find((item) => item.id === state.aiModel);
+  return match || fallback;
+}
+
+function syncModelSelectors() {
+  const modelId = getActiveModelInfo().id;
+  if (mapperModelSelect) {
+    mapperModelSelect.value = modelId;
+  }
+  if (startModelSelect) {
+    startModelSelect.value = modelId;
+  }
+}
+
+function setActiveModel(modelId) {
+  const match = OPENAI_MODELS.find((item) => item.id === modelId);
+  if (!match) {
+    state.aiModel = DEFAULT_OPENAI_MODEL;
+  } else {
+    state.aiModel = match.id;
+  }
+  syncModelSelectors();
+  scheduleStateSave();
+}
+
+function syncMapperKeyUI() {
+  const stored = hasStoredMapperKey();
+  if (mapperRememberToggle) {
+    mapperRememberToggle.checked = stored;
+  }
+  if (mapperUnlockKeyBtn) {
+    mapperUnlockKeyBtn.disabled = !stored;
+  }
+  if (mapperForgetKeyBtn) {
+    mapperForgetKeyBtn.disabled = !stored;
+  }
+  if (!stored && mapperPassphraseInput) {
+    mapperPassphraseInput.value = '';
+  }
+}
+
+async function attemptSessionUnlock() {
+  try {
+    if (!mapperApiKeyInput) return;
+    const record = getStoredMapperRecord();
+    if (!record) {
+      return;
+    }
+    const passphrase = window.sessionStorage?.getItem(MAPPER_SESSION_PASSPHRASE) || '';
+    if (!passphrase) {
+      return;
+    }
+    const key = await decryptMapperKey(record, passphrase);
+    if (key) {
+      mapperApiKeyInput.value = key;
+      if (mapperPassphraseInput) {
+        mapperPassphraseInput.value = passphrase;
+      }
+      syncMapperKeyUI();
+    }
+  } catch (error) {
+    if (window.sessionStorage) {
+      window.sessionStorage.removeItem(MAPPER_SESSION_PASSPHRASE);
+    }
+    console.warn('Unable to restore API key from session:', error);
   }
 }
 
@@ -408,6 +783,8 @@ let state = {
   categories: [],
   theme: 'win95',
   autoThemeCycle: false,
+  aiModel: DEFAULT_OPENAI_MODEL,
+  journalEntries: [],
 };
 
 const spendingImportState = {
@@ -419,6 +796,12 @@ const spendingImportState = {
 const assistantState = {
   messages: [],
   busy: false,
+};
+
+const calendarState = {
+  view: 'monthly',
+  focusDate: new Date(),
+  editingId: null,
 };
 
 const WINDOW_MODE_BREAKPOINT = 860;
@@ -570,8 +953,12 @@ function init() {
     }
     state.autoThemeCycle = Boolean(persisted.autoThemeCycle);
     state.categories = buildInitialCategories(state.weeklyIncome, persisted.categories);
+    state.journalEntries = Array.isArray(persisted.journalEntries) ? persisted.journalEntries : [];
+    state.aiModel = persisted.aiModel || DEFAULT_OPENAI_MODEL;
   } else {
     state.categories = createRecommendedCategories(state.weeklyIncome);
+    state.journalEntries = [];
+    state.aiModel = DEFAULT_OPENAI_MODEL;
   }
   if (weeklyIncomeInput) {
     weeklyIncomeInput.value = state.weeklyIncome.toFixed(2);
@@ -579,21 +966,11 @@ function init() {
   setActiveScopeChip(state.scope);
   applyTheme(state.theme);
   syncAutoThemeToggle();
+  syncModelSelectors();
   syncAllCategoryAmounts();
   updateFocusToggleLabel();
   renderAll();
-  if (mapperRememberToggle) {
-    mapperRememberToggle.checked = false;
-  }
-  if (mapperApiKeyInput) {
-    const storedKey = getStoredMapperKey();
-    if (storedKey) {
-      mapperApiKeyInput.value = storedKey;
-      if (mapperRememberToggle) {
-        mapperRememberToggle.checked = true;
-      }
-    }
-  }
+  syncMapperKeyUI();
   if (mapperPromptInput) {
     const savedPrompt = getStoredMapperPrompt();
     mapperPromptInput.value = savedPrompt || DEFAULT_MAPPER_PROMPT;
@@ -605,6 +982,7 @@ function init() {
   startTaskbarClock();
   renderAssistantLog();
   scheduleStateSave();
+  attemptSessionUnlock();
 }
 
 function formatCurrency(amount) {
@@ -1130,6 +1508,190 @@ function renderMapperEntries() {
   }
 }
 
+function getJournalEntriesForDate(dateIso) {
+  return state.journalEntries.filter((entry) => entry.date === dateIso);
+}
+
+function getJournalEntriesForView() {
+  const focus = calendarState.focusDate instanceof Date ? calendarState.focusDate : new Date();
+  const focusIso = toISODate(focus);
+  if (calendarState.view === 'daily') {
+    return state.journalEntries.filter((entry) => entry.date === focusIso);
+  }
+  if (calendarState.view === 'weekly') {
+    const start = startOfWeek(focus);
+    const end = endOfWeek(focus);
+    return state.journalEntries.filter((entry) => {
+      if (!isValidISODate(entry.date)) return false;
+      const entryDate = new Date(entry.date);
+      return entryDate >= start && entryDate <= end;
+    });
+  }
+  const month = focus.getMonth();
+  const year = focus.getFullYear();
+  return state.journalEntries.filter((entry) => {
+    if (!isValidISODate(entry.date)) return false;
+    const entryDate = new Date(entry.date);
+    return entryDate.getFullYear() === year && entryDate.getMonth() === month;
+  });
+}
+
+function calculateJournalTotals(entries) {
+  const total = entries.reduce((sum, entry) => sum + (Number.isFinite(entry.amount) ? entry.amount : 0), 0);
+  return { count: entries.length, total };
+}
+
+function renderCalendarEntriesList(entries) {
+  if (!calendarEntriesList) return;
+  calendarEntriesList.innerHTML = '';
+  if (!entries.length) {
+    const empty = document.createElement('p');
+    empty.className = 'calendar-empty';
+    empty.textContent = 'No journal entries yet for this view. Add one to start tracking.';
+    calendarEntriesList.appendChild(empty);
+    return;
+  }
+
+  const sorted = [...entries].sort((a, b) => {
+    if (a.date === b.date) {
+      return a.title.localeCompare(b.title);
+    }
+    return a.date.localeCompare(b.date);
+  });
+
+  sorted.forEach((entry) => {
+    const item = document.createElement('article');
+    item.className = 'calendar-entry';
+    item.dataset.entryId = entry.id;
+    item.innerHTML = `
+      <div class="calendar-entry__meta">
+        <span>${escapeHtml(entry.date)}</span>
+        <span>${formatCurrency(entry.amount || 0)}</span>
+      </div>
+      <strong>${escapeHtml(entry.title)}</strong>
+      ${entry.notes ? `<p class="calendar-entry__notes">${escapeHtml(entry.notes)}</p>` : ''}
+      <div class="calendar-entry__actions">
+        <button type="button" class="btn-tertiary" data-calendar-edit="${entry.id}">Edit</button>
+        <button type="button" class="btn-tertiary" data-calendar-delete="${entry.id}">Delete</button>
+      </div>
+    `;
+    calendarEntriesList.appendChild(item);
+  });
+}
+
+function renderCalendarSummary(entries) {
+  if (!calendarSummary) return;
+  const totals = calculateJournalTotals(entries);
+  const formattedTotal = formatCurrency(totals.total || 0);
+  calendarSummary.textContent = `${totals.count} entr${totals.count === 1 ? 'y' : 'ies'} · ${formattedTotal}`;
+}
+
+function renderCalendarGrid(focus) {
+  if (!calendarGrid) return;
+  const focusMonth = focus.getMonth();
+  const focusYear = focus.getFullYear();
+  const monthStart = startOfMonth(focus);
+  const gridStart = startOfWeek(monthStart);
+  const cells = [];
+  for (let index = 0; index < 42; index += 1) {
+    const current = addDays(gridStart, index);
+    const iso = toISODate(current);
+    const entries = getJournalEntriesForDate(iso);
+    const total = entries.reduce((sum, entry) => sum + (Number.isFinite(entry.amount) ? entry.amount : 0), 0);
+    const isMuted = current.getMonth() !== focusMonth || current.getFullYear() !== focusYear;
+    const isActive = iso === toISODate(focus);
+    const chips = entries
+      .slice(0, 3)
+      .map((entry) => `<span class="calendar-day__chip">${escapeHtml(entry.title)}</span>`)
+      .join('');
+    cells.push(`
+      <button type="button" class="calendar-day${isMuted ? ' calendar-day--muted' : ''}${
+      isActive ? ' calendar-day--active' : ''
+    }" data-calendar-date="${iso}">
+        <div class="calendar-day__header">
+          <span>${current.getDate()}</span>
+          <span class="calendar-day__amount">${total > 0 ? formatCurrency(total) : ''}</span>
+        </div>
+        <div class="calendar-day__list">${chips || '<span class="calendar-day__chip">&nbsp;</span>'}</div>
+      </button>
+    `);
+  }
+  calendarGrid.innerHTML = cells.join('');
+}
+
+function renderCalendar() {
+  if (!calendarViewSelect || !calendarDateInput) {
+    return;
+  }
+  const focus = calendarState.focusDate instanceof Date ? calendarState.focusDate : new Date();
+  calendarState.view = sanitizeCalendarView(calendarState.view);
+  calendarViewSelect.value = calendarState.view;
+  calendarDateInput.value = toISODate(focus);
+  renderCalendarGrid(focus);
+  const entries = getJournalEntriesForView();
+  renderCalendarEntriesList(entries);
+  renderCalendarSummary(entries);
+}
+
+function setCalendarView(view) {
+  calendarState.view = sanitizeCalendarView(view);
+  renderCalendar();
+}
+
+function setCalendarFocus(dateIso) {
+  if (!isValidISODate(dateIso)) {
+    updateCalendarStatus('Choose a valid date for the journal.', 'error');
+    return;
+  }
+  calendarState.focusDate = new Date(`${dateIso}T00:00:00`);
+  renderCalendar();
+}
+
+function resetCalendarForm(defaultDate) {
+  if (!calendarForm) return;
+  const iso = isValidISODate(defaultDate) ? defaultDate : toISODate(calendarState.focusDate || new Date());
+  calendarState.editingId = null;
+  calendarEntryIdInput.value = '';
+  calendarEntryDateInput.value = iso;
+  calendarEntryTitleInput.value = '';
+  calendarEntryAmountInput.value = '';
+  calendarEntryNotesInput.value = '';
+  updateCalendarStatus('');
+}
+
+function beginCalendarEdit(entry) {
+  if (!calendarForm || !entry) return;
+  calendarState.editingId = entry.id;
+  calendarEntryIdInput.value = entry.id;
+  calendarEntryDateInput.value = entry.date;
+  calendarEntryTitleInput.value = entry.title;
+  calendarEntryAmountInput.value = Number.isFinite(entry.amount) ? entry.amount : '';
+  calendarEntryNotesInput.value = entry.notes || '';
+  updateCalendarStatus('Editing entry — adjust fields then save.');
+  setCalendarFocus(entry.date);
+}
+
+function upsertJournalEntry(entry) {
+  const index = state.journalEntries.findIndex((item) => item.id === entry.id);
+  if (index === -1) {
+    state.journalEntries.push(entry);
+  } else {
+    state.journalEntries[index] = entry;
+  }
+  state.journalEntries.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function deleteJournalEntry(id) {
+  state.journalEntries = state.journalEntries.filter((entry) => entry.id !== id);
+  renderCalendar();
+  scheduleStateSave();
+  updateCalendarStatus('Entry removed from the journal.', 'success');
+}
+
+function generateJournalEntryId() {
+  return `${JOURNAL_ENTRY_PREFIX}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+}
+
 function updateMapperStatus(message, tone = 'info') {
   if (!mapperStatus) return;
   mapperStatus.textContent = message || '';
@@ -1137,6 +1699,16 @@ function updateMapperStatus(message, tone = 'info') {
     mapperStatus.dataset.tone = tone;
   } else {
     mapperStatus.removeAttribute('data-tone');
+  }
+}
+
+function updateCalendarStatus(message = '', tone = 'info') {
+  if (!calendarStatus) return;
+  calendarStatus.textContent = message || '';
+  if (message) {
+    calendarStatus.dataset.tone = tone;
+  } else {
+    calendarStatus.removeAttribute('data-tone');
   }
 }
 
@@ -1498,11 +2070,14 @@ async function readPdfAsText(file) {
   }
 }
 
-function truncateForModel(text, limit = 8000) {
-  if (!text || text.length <= limit) {
+function truncateForModel(text, limit) {
+  const modelInfo = getActiveModelInfo();
+  const fallbackLimit = Math.max(4000, (modelInfo?.maxChars || 8000) - 800);
+  const effectiveLimit = Number.isFinite(limit) && limit > 0 ? limit : fallbackLimit;
+  if (!text || text.length <= effectiveLimit) {
     return text;
   }
-  return `${text.slice(0, limit - 120)}… (truncated)`;
+  return `${text.slice(0, effectiveLimit - 120)}… (truncated)`;
 }
 
 async function analyzeStatementWithAI(files, apiKey) {
@@ -1553,6 +2128,7 @@ async function analyzeStatementWithAI(files, apiKey) {
   }
 
   const promptInstructions = (mapperPromptInput?.value || '').trim() || DEFAULT_MAPPER_PROMPT;
+  const personalContext = buildPersonalContext();
   const supplementalRules = [
     'Supplemental rules:',
     '• Examine every transaction across all pages—never summarize just a portion of the statement.',
@@ -1562,13 +2138,16 @@ async function analyzeStatementWithAI(files, apiKey) {
   ].join('\n');
 
   const userInstructionText = [
+    personalContext ? `Existing plan details:\n${personalContext}` : '',
     promptInstructions,
     supplementalRules,
     'Return JSON that follows the provided schema. Amounts must be positive USD numbers and notes should mention how you grouped the line items or any assumptions made.',
   ].join('\n\n');
 
+  const modelInfo = getActiveModelInfo();
+  const snippetLimit = Math.max(4000, (modelInfo?.maxChars || 8000) - 800);
   const requestBody = {
-    model: 'gpt-4o-mini',
+    model: modelInfo.id,
     response_format: {
       type: 'json_schema',
       json_schema: {
@@ -1617,10 +2196,8 @@ async function analyzeStatementWithAI(files, apiKey) {
             ? [
                 {
                   type: 'text',
-                  text: truncateForModel(
-                    `Here are text excerpts from PDF statements:\n\n${pdfSnippets.join('\n\n---\n\n')}`,
-                    9000
-                  ),
+                  text: truncateForModel(`Here are text excerpts from PDF statements:\n\n${pdfSnippets.join('\n\n---\n\n')}`,
+                    snippetLimit),
                 },
               ]
             : []),
@@ -1701,14 +2278,19 @@ async function fetchAssistantReply(apiKey) {
   }
 
   const recentHistory = assistantState.messages.slice(-ASSISTANT_HISTORY_LIMIT);
-  const messages = [
-    { role: 'system', content: ASSISTANT_SYSTEM_PROMPT },
+  const messages = [{ role: 'system', content: ASSISTANT_SYSTEM_PROMPT }];
+  const context = buildPersonalContext();
+  if (context) {
+    messages.push({ role: 'system', content: `Budget context:\n${context}` });
+  }
+  messages.push(
     ...recentHistory.map((entry) => ({
       role: entry.role === 'assistant' ? 'assistant' : 'user',
       content: entry.content,
-    })),
-  ];
+    }))
+  );
 
+  const modelInfo = getActiveModelInfo();
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -1716,7 +2298,7 @@ async function fetchAssistantReply(apiKey) {
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: 'gpt-4o-mini',
+      model: modelInfo.id,
       messages,
       temperature: 0.55,
       max_tokens: 600,
@@ -1948,6 +2530,7 @@ function renderAll() {
   renderFinalShowcase();
   renderInsights();
   renderMapperEntries();
+  renderCalendar();
   scheduleStateSave();
 }
 
@@ -3506,6 +4089,120 @@ if (mapperApplyAllBtn) {
   });
 }
 
+if (calendarViewSelect) {
+  calendarViewSelect.addEventListener('change', (event) => {
+    setCalendarView(event.target.value);
+    scheduleStateSave();
+  });
+}
+
+if (calendarDateInput) {
+  calendarDateInput.addEventListener('change', (event) => {
+    if (isValidISODate(event.target.value)) {
+      setCalendarFocus(event.target.value);
+      scheduleStateSave();
+    } else {
+      updateCalendarStatus('Use YYYY-MM-DD format for the date.', 'error');
+    }
+  });
+}
+
+if (calendarGrid) {
+  calendarGrid.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-calendar-date]');
+    if (!button) return;
+    const iso = button.dataset.calendarDate;
+    if (isValidISODate(iso)) {
+      setCalendarFocus(iso);
+      resetCalendarForm(iso);
+    }
+  });
+}
+
+if (calendarNewEntryBtn) {
+  calendarNewEntryBtn.addEventListener('click', () => {
+    const focusIso = toISODate(calendarState.focusDate || new Date());
+    resetCalendarForm(focusIso);
+    updateCalendarStatus('Ready to log a new moment.', 'info');
+  });
+}
+
+if (calendarCancelEditBtn) {
+  calendarCancelEditBtn.addEventListener('click', () => {
+    const focusIso = toISODate(calendarState.focusDate || new Date());
+    resetCalendarForm(focusIso);
+    updateCalendarStatus('');
+  });
+}
+
+if (calendarForm) {
+  calendarForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const dateValue = calendarEntryDateInput.value.trim();
+    if (!isValidISODate(dateValue)) {
+      updateCalendarStatus('Pick a valid date for the journal entry.', 'error');
+      return;
+    }
+    const title = calendarEntryTitleInput.value.trim();
+    if (!title) {
+      updateCalendarStatus('Add a title so the entry is easy to recognize.', 'error');
+      return;
+    }
+    const amountRaw = Number.parseFloat(calendarEntryAmountInput.value);
+    if (!Number.isFinite(amountRaw) || amountRaw < 0) {
+      updateCalendarStatus('Enter a positive amount (use 0 for non-spending notes).', 'error');
+      return;
+    }
+    const notes = calendarEntryNotesInput.value.trim();
+    const isEdit = Boolean(calendarState.editingId);
+    const entry = {
+      id: calendarState.editingId || generateJournalEntryId(),
+      date: dateValue,
+      title,
+      amount: amountRaw,
+      notes,
+    };
+    calendarState.editingId = null;
+    upsertJournalEntry(entry);
+    setCalendarFocus(dateValue);
+    resetCalendarForm(dateValue);
+    renderCalendar();
+    scheduleStateSave();
+    updateCalendarStatus(isEdit ? 'Entry updated successfully.' : 'Entry added to your journal.', 'success');
+  });
+}
+
+if (calendarEntriesList) {
+  calendarEntriesList.addEventListener('click', (event) => {
+    const editButton = event.target.closest('[data-calendar-edit]');
+    if (editButton) {
+      const id = editButton.dataset.calendarEdit;
+      const entry = state.journalEntries.find((item) => item.id === id);
+      if (entry) {
+        beginCalendarEdit(entry);
+      }
+      return;
+    }
+    const deleteButton = event.target.closest('[data-calendar-delete]');
+    if (deleteButton) {
+      const id = deleteButton.dataset.calendarDelete;
+      deleteJournalEntry(id);
+    }
+  });
+}
+
+if (mapperModelSelect) {
+  mapperModelSelect.addEventListener('change', (event) => {
+    setActiveModel(event.target.value);
+  });
+}
+
+if (startModelSelect) {
+  startModelSelect.addEventListener('change', (event) => {
+    setActiveModel(event.target.value);
+  });
+}
+
 if (mapperResultsBody) {
   mapperResultsBody.addEventListener('change', (event) => {
     if (spendingImportState.busy) return;
@@ -3546,9 +4243,23 @@ if (mapperAnalyzeBtn) {
       setMapperBusy(false);
       if (mapperRememberToggle) {
         if (mapperRememberToggle.checked && apiKey) {
-          persistMapperKey(apiKey);
+          const passphrase = mapperPassphraseInput?.value?.trim();
+          if (!passphrase) {
+            mapperRememberToggle.checked = false;
+            updateMapperStatus('Add an encryption passphrase before remembering your API key.', 'error');
+          } else {
+            try {
+              await persistMapperKey(apiKey, passphrase);
+              syncMapperKeyUI();
+              updateMapperStatus('Key stored securely on this device.', 'success');
+            } catch (error) {
+              mapperRememberToggle.checked = false;
+              updateMapperStatus('Unable to store the API key on this device.', 'error');
+            }
+          }
         } else if (!mapperRememberToggle.checked) {
-          persistMapperKey('');
+          clearStoredMapperKey();
+          syncMapperKeyUI();
         }
       }
       if (entries.length) {
@@ -3574,20 +4285,35 @@ if (mapperPromptInput) {
 }
 
 if (mapperRememberToggle) {
-  mapperRememberToggle.addEventListener('change', () => {
+  mapperRememberToggle.addEventListener('change', async () => {
     if (spendingImportState.busy) {
       return;
     }
     if (mapperRememberToggle.checked) {
       const key = mapperApiKeyInput?.value?.trim();
       if (key) {
-        persistMapperKey(key);
+        const passphrase = mapperPassphraseInput?.value?.trim();
+        if (!passphrase) {
+          mapperRememberToggle.checked = false;
+          updateMapperStatus('Enter a passphrase to encrypt your API key.', 'error');
+          return;
+        }
+        try {
+          await persistMapperKey(key, passphrase);
+          syncMapperKeyUI();
+          updateMapperStatus('Key stored securely on this device.', 'success');
+        } catch (error) {
+          mapperRememberToggle.checked = false;
+          updateMapperStatus('Unable to store the API key on this device.', 'error');
+        }
       } else {
         mapperRememberToggle.checked = false;
         updateMapperStatus('Enter an API key before enabling “Remember this key”.', 'error');
       }
     } else {
-      persistMapperKey('');
+      clearStoredMapperKey();
+      syncMapperKeyUI();
+      updateMapperStatus('Saved API key cleared from this device.');
     }
   });
 }
@@ -3597,24 +4323,58 @@ if (mapperForgetKeyBtn) {
     if (spendingImportState.busy) {
       return;
     }
-    persistMapperKey('');
+    clearStoredMapperKey();
     if (mapperApiKeyInput) {
       mapperApiKeyInput.value = '';
     }
     if (mapperRememberToggle) {
       mapperRememberToggle.checked = false;
     }
+    syncMapperKeyUI();
     updateMapperStatus('Saved API key cleared from this device.');
   });
 }
 
 if (mapperApiKeyInput) {
-  mapperApiKeyInput.addEventListener('change', () => {
+  mapperApiKeyInput.addEventListener('change', async () => {
     if (mapperRememberToggle?.checked) {
       const key = mapperApiKeyInput.value.trim();
-      if (key) {
-        persistMapperKey(key);
+      const passphrase = mapperPassphraseInput?.value?.trim();
+      if (key && passphrase) {
+        try {
+          await persistMapperKey(key, passphrase);
+          syncMapperKeyUI();
+        } catch (error) {
+          updateMapperStatus('Unable to update the stored API key.', 'error');
+        }
       }
+    }
+  });
+}
+
+if (mapperUnlockKeyBtn) {
+  mapperUnlockKeyBtn.addEventListener('click', async () => {
+    const record = getStoredMapperRecord();
+    if (!record) {
+      updateMapperStatus('No saved key exists on this device.', 'error');
+      return;
+    }
+    const passphrase = mapperPassphraseInput?.value?.trim();
+    if (!passphrase) {
+      updateMapperStatus('Enter the passphrase used when saving your key.', 'error');
+      return;
+    }
+    try {
+      const key = await decryptMapperKey(record, passphrase);
+      if (mapperApiKeyInput) {
+        mapperApiKeyInput.value = key;
+      }
+      if (window.sessionStorage) {
+        window.sessionStorage.setItem(MAPPER_SESSION_PASSPHRASE, passphrase);
+      }
+      updateMapperStatus('Saved API key unlocked for this session.', 'success');
+    } catch (error) {
+      updateMapperStatus(error.message || 'Unable to unlock the saved key.', 'error');
     }
   });
 }

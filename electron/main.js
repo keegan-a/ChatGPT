@@ -4,13 +4,19 @@ const path = require('path');
 const isDev = !app.isPackaged;
 
 function createWindow() {
-  const iconPath = path.join(__dirname, '..', 'icons', 'budget95-icon-512x512.base64.txt');
+  const packagedIconPath = path.join(__dirname, '..', 'dist', 'icons', 'budget95-icon-512.png');
   let appIcon = undefined;
   try {
-    const raw = require('fs').readFileSync(iconPath, 'utf8').trim();
-    const base64 = raw.includes(',') ? raw.split(',').pop() : raw;
-    const buffer = Buffer.from(base64, 'base64');
-    appIcon = nativeImage.createFromBuffer(buffer);
+    if (require('fs').existsSync(packagedIconPath)) {
+      appIcon = nativeImage.createFromPath(packagedIconPath);
+    }
+    if (!appIcon || appIcon.isEmpty()) {
+      const fallbackPath = path.join(__dirname, '..', 'icons', 'budget95-icon-512x512.base64.txt');
+      const raw = require('fs').readFileSync(fallbackPath, 'utf8').trim();
+      const base64 = raw.includes(',') ? raw.split(',').pop() : raw;
+      const buffer = Buffer.from(base64, 'base64');
+      appIcon = nativeImage.createFromBuffer(buffer);
+    }
   } catch (error) {
     console.warn('Unable to load icon for Electron window:', error);
   }

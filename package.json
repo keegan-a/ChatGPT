@@ -22,8 +22,10 @@
   "devDependencies": {
     "@capacitor/cli": "^5.6.6",
     "@capacitor/ios": "^5.6.6",
-    "electron": "^27.1.0",
-    "electron-builder": "^24.6.4"
+    "electron": "^38.3.0",
+    "electron-builder": "^24.6.4",
+    "icon-gen": "^3.1.0",
+    "png-to-ico": "^3.0.4"
   },
   "dependencies": {
     "@capacitor/android": "^5.6.6",
@@ -43,13 +45,16 @@
       "dist"
     ],
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "dist/icons/budget95.ico"
     },
     "mac": {
-      "target": "dmg"
+      "target": "dmg",
+      "icon": "dist/icons/budget95.icns"
     },
     "linux": {
-      "target": "AppImage"
+      "target": "AppImage",
+      "icon": "dist/icons"
     }
   }
 }
