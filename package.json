@@ -1,0 +1,26 @@
+{
+  "name": "budget95",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "prepare:web": "node scripts/prepare-web.js"
+  },
+  "devDependencies": {
+    "icon-gen": "^2.0.1"
+  },
+  "build": {
+    "appId": "com.example.budget95",
+    "directories": {
+      "buildResources": "dist"
+    },
+    "win": {
+      "icon": "dist/icons/budget95-icon.ico"
+    },
+    "mac": {
+      "icon": "dist/icons/budget95-icon.icns"
+    },
+    "linux": {
+      "icon": "dist/icons/budget95-icon-512.png"
+    }
+  }
+}
