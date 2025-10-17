@@ -45,11 +45,14 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: true
+      sandbox: false
     }
   });
 
-  const indexFile = path.join(__dirname, '..', 'dist', 'index.html');
+  const appPath = app.getAppPath();
+  const indexFile = path.join(appPath, 'dist', 'index.html');
+  console.log('getAppPath:', appPath);
+  console.log('index path:', indexFile);
   const devServer = process.env.BUDGET95_DEV_SERVER || 'http://localhost:8000/';
   if (isDev) {
     window.loadURL(devServer).catch((error) => {
