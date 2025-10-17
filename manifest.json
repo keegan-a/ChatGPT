@@ -1,0 +1,16 @@
+{
+  "name": "Nostalgia Budget Suite",
+  "short_name": "BudgetSuite",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0b5394",
+  "theme_color": "#0078d7",
+  "description": "Retro-inspired budgeting desktop with multi-era themes, forecasts, and printable showcase.",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128'%3E%3Crect width='128' height='128' rx='20' ry='20' fill='%230078d7'/%3E%3Crect x='18' y='22' width='92' height='74' rx='10' ry='10' fill='%23fff'/%3E%3Crect x='26' y='30' width='76' height='50' rx='8' ry='8' fill='%2300479b'/%3E%3Cpath d='M32 88h64v8c0 4.4-3.6 8-8 8H40c-4.4 0-8-3.6-8-8v-8z' fill='%23002354'/%3E%3Cpath d='M64 42c11 0 20 9 20 20s-9 20-20 20-20-9-20-20 9-20 20-20z' fill='%23fff'/%3E%3Cpath d='M64 50c6.6 0 12 5.4 12 12s-5.4 12-12 12-12-5.4-12-12 5.4-12 12-12z' fill='%230078d7'/%3E%3C/svg%3E",
+      "sizes": "128x128",
+      "type": "image/svg+xml"
+    }
+  ]
+}
