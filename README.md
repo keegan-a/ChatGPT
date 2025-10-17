@@ -88,6 +88,8 @@ You now have access to:
 - Scope toggles for daily, weekly, monthly, and yearly views.
 - The Budget Insights window with live callouts, autosave controls, and quick resets.
 - Auto theme cycling and keyboard shortcuts (`Ctrl` + `←`/`→`, `Ctrl` + `Shift` + `F`) for rapid navigation.
+- A budget health gauge that shows how much of your income the plan is consuming.
+- The Spending Mapper window for manual or AI-assisted transaction imports.
 
 ---
 
@@ -95,6 +97,7 @@ You now have access to:
 - The **taskbar** keeps a button for every window. Click a button to bring its panel forward or to restore it if you minimized it.
 - Tap the green **Start** button to open the Start menu. From there you can re-open closed windows, switch between the Windows 95, Windows XP Bliss, Windows Vista, or 2000s Macintosh aesthetics, jump into the Final Budget Showcase, launch the Classic Snake easter egg, or fire up the newly 3D-rendered Pipes screensaver.
 - Window controls now mimic the original desktop experience—hover to see their labels, minimize panels to the taskbar, or double-click title bars to maximize and restore.
+- The **Data tools** section of the Start menu lets you launch the Spending Mapper, cascade or tile every window, or toggle a focus mode that spotlights the active panel.
 - Try the **Classic Snake** Easter egg from the Start menu. Use the arrow keys to guide the snake once the Snake window is focused.
 - If you close a panel accidentally, re-open it from the Start menu’s **Windows** section.
 - On large screens you can drag window title bars or use the resize grips in the lower-right corner for a full retro desktop feel.
@@ -106,6 +109,13 @@ You now have access to:
 - `Ctrl` + `Shift` + `F` opens the Final Budget Showcase on demand.
 - Toggle **Auto-cycle themes** in the Budget Insights window to rotate aesthetics every 45 seconds.
 - Budgets now autosave locally—returning to the app restores your last plan unless you reset it.
+
+### Spending Mapper & AI imports
+
+- Open the **Spending Mapper** from Start → Data tools to paste plain-text statements or upload a screenshot.
+- Manual lines work best in the format `Category - Amount - cadence`. Supported cadences include daily, weekly, monthly, biweekly (converted to weekly), and yearly (converted to monthly).
+- To try AI assistance, paste an OpenAI API key (sk-...) and upload a statement image. The request is sent directly to OpenAI; no key is stored in the app. If you are offline or the key is missing/invalid the analysis will fail—manual entry always remains available.
+- Map detected entries to existing categories or create new ones, then apply them individually or all at once.
 
 ---
 

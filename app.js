@@ -27,6 +27,19 @@ const themeMeta = document.querySelector('meta[name="theme-color"]');
 const insightsList = document.querySelector('#insightsList');
 const resetBlueprintButton = document.querySelector('#resetBlueprint');
 const autoThemeToggle = document.querySelector('#autoThemeToggle');
+const budgetHealthContainer = document.querySelector('#budgetHealth');
+const mapperApiKeyInput = document.querySelector('#mapperApiKey');
+const mapperFileInput = document.querySelector('#mapperFile');
+const mapperAnalyzeBtn = document.querySelector('#mapperAnalyzeBtn');
+const mapperManualInput = document.querySelector('#mapperManualInput');
+const mapperParseBtn = document.querySelector('#mapperParseBtn');
+const mapperClearBtn = document.querySelector('#mapperClearBtn');
+const mapperApplyAllBtn = document.querySelector('#mapperApplyAllBtn');
+const mapperStatus = document.querySelector('#mapperStatus');
+const mapperResultsBody = document.querySelector('#mapperResultsBody');
+const mapperRowTemplate = document.querySelector('#mapperRowTemplate');
+const mapperAiNotice = document.querySelector('#mapperAiNotice');
+const startFocusToggle = document.querySelector('[data-action="toggle-focus"]');
 const body = document.body;
 
 const scopeFactors = {
@@ -304,9 +317,17 @@ let state = {
   autoThemeCycle: false,
 };
 
+const spendingImportState = {
+  entries: [],
+  busy: false,
+  message: '',
+};
+
 const WINDOW_MODE_BREAKPOINT = 860;
 let highestZIndex = 100;
 let windowModeActive = false;
+
+let focusModeEnabled = false;
 
 const windowRegistry = new Map();
 let activeWindowId = null;
@@ -417,6 +438,26 @@ function buildInitialCategories(weeklyIncome, persistedCategories) {
   return merged.concat(customCategories);
 }
 
+function normalizeCategoryAmounts(category) {
+  const frequency = sanitizeFrequency(category.entryFrequency);
+  const weeklyAmount = Number.isFinite(category.weeklyAmount)
+    ? category.weeklyAmount
+    : convertToWeekly(Number.isFinite(category.entryAmount) ? category.entryAmount : 0, frequency);
+  const entryAmount = Number.isFinite(category.entryAmount)
+    ? category.entryAmount
+    : convertFromWeekly(weeklyAmount, frequency);
+  return {
+    ...category,
+    entryFrequency: frequency,
+    weeklyAmount,
+    entryAmount,
+  };
+}
+
+function syncAllCategoryAmounts() {
+  state.categories = state.categories.map((category) => normalizeCategoryAmounts(category));
+}
+
 function init() {
   const persisted = loadPersistedState();
   if (persisted) {
@@ -440,7 +481,10 @@ function init() {
   setActiveScopeChip(state.scope);
   applyTheme(state.theme);
   syncAutoThemeToggle();
+  syncAllCategoryAmounts();
+  updateFocusToggleLabel();
   renderAll();
+  updateMapperStatus('Upload a statement image or paste text to start mapping.');
   initializeSnakeGame();
   initializeScreensaver();
   registerWindows();
@@ -724,6 +768,36 @@ function renderSummary() {
     card.append(label, value);
     summaryGrid.appendChild(card);
   });
+
+  if (budgetHealthContainer) {
+    const expenseRatio = state.weeklyIncome === 0 ? 0 : totalExpensesWeekly / state.weeklyIncome;
+    const clampedRatio = Math.max(0, Math.min(expenseRatio, 1.5));
+    const goalRatio = 0.8;
+    let healthMessage = 'Dial in your categories to stay below 80% of income.';
+    if (expenseRatio <= 0.75) {
+      healthMessage = 'Fantastic! Your plan keeps plenty of cash free each week.';
+    } else if (expenseRatio <= 1) {
+      healthMessage = 'Close to balanced—trim a category or two to grow savings.';
+    } else {
+      healthMessage = 'Over budget—consider scaling back or increasing income inputs.';
+    }
+    const leftoverDescriptor = leftoverWeekly >= 0 ? 'weekly buffer' : 'overage';
+    budgetHealthContainer.hidden = false;
+    budgetHealthContainer.innerHTML = `
+      <div class="budget-health__label">
+        <span>Planned spending coverage</span>
+        <strong>${(expenseRatio * 100).toFixed(1)}%</strong>
+      </div>
+      <div class="budget-health__meter">
+        <div class="budget-health__fill" style="transform: scaleX(${clampedRatio});"></div>
+        <div class="budget-health__goal" style="left: ${goalRatio * 100}%;"></div>
+      </div>
+      <div class="budget-health__label">
+        <span>${healthMessage}</span>
+        <span>${formatCurrency(Math.abs(leftoverWeekly))} ${leftoverDescriptor}</span>
+      </div>
+    `;
+  }
 }
 
 function renderFutureForecast() {
@@ -853,6 +927,478 @@ function renderInsights() {
     item.textContent = entry;
     insightsList.appendChild(item);
   });
+}
+
+function ensureMapperTarget(entry) {
+  if (!entry) return '';
+  if (entry.targetId && state.categories.some((category) => category.id === entry.targetId)) {
+    return entry.targetId;
+  }
+  const guess = guessMapperTarget(entry);
+  entry.targetId = guess || '';
+  return entry.targetId;
+}
+
+function renderMapperEntries() {
+  if (!mapperResultsBody) {
+    return;
+  }
+
+  mapperResultsBody.innerHTML = '';
+  const hasEntries = spendingImportState.entries.length > 0;
+  if (!hasEntries) {
+    const emptyRow = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 5;
+    cell.className = 'mapper-empty';
+    cell.textContent = spendingImportState.busy
+      ? 'Analyzing your statement…'
+      : 'No imported entries yet. Upload a statement or paste text to begin.';
+    emptyRow.appendChild(cell);
+    mapperResultsBody.appendChild(emptyRow);
+    if (mapperApplyAllBtn) {
+      mapperApplyAllBtn.disabled = true;
+    }
+    return;
+  }
+
+  const categories = state.categories
+    .slice()
+    .sort((a, b) => {
+      if (a.recommended === b.recommended) {
+        return a.name.localeCompare(b.name);
+      }
+      return a.recommended ? -1 : 1;
+    });
+
+  const fragment = document.createDocumentFragment();
+  spendingImportState.entries.forEach((entry) => {
+    ensureMapperTarget(entry);
+    const templateRow = mapperRowTemplate?.content?.firstElementChild;
+    const row = templateRow ? templateRow.cloneNode(true) : document.createElement('tr');
+    row.dataset.entryId = entry.id;
+
+    const labelCell =
+      row.querySelector('.mapper-col--label') || row.cells?.[0] || row.appendChild(document.createElement('td'));
+    labelCell.textContent = entry.label;
+
+    const amountCell =
+      row.querySelector('.mapper-col--amount') || row.cells?.[1] || row.appendChild(document.createElement('td'));
+    amountCell.textContent = formatCurrency(entry.amount);
+
+    const frequencySelect = row.querySelector('.mapper-frequency');
+    if (frequencySelect) {
+      frequencySelect.value = entry.frequency;
+      frequencySelect.dataset.entryId = entry.id;
+      frequencySelect.disabled = spendingImportState.busy;
+    }
+
+    const targetSelect = row.querySelector('.mapper-target');
+    if (targetSelect) {
+      targetSelect.dataset.entryId = entry.id;
+      populateMapperTargetOptions(targetSelect, entry, categories);
+      targetSelect.disabled = spendingImportState.busy;
+    }
+
+    const applyButton = row.querySelector('.mapper-apply');
+    if (applyButton) {
+      applyButton.dataset.entryId = entry.id;
+      applyButton.disabled = spendingImportState.busy;
+    }
+
+    fragment.appendChild(row);
+  });
+
+  mapperResultsBody.appendChild(fragment);
+  if (mapperApplyAllBtn) {
+    mapperApplyAllBtn.disabled = spendingImportState.busy;
+  }
+}
+
+function updateMapperStatus(message, tone = 'info') {
+  if (!mapperStatus) return;
+  mapperStatus.textContent = message || '';
+  if (message) {
+    mapperStatus.dataset.tone = tone;
+  } else {
+    mapperStatus.removeAttribute('data-tone');
+  }
+}
+
+function setMapperBusy(isBusy) {
+  spendingImportState.busy = isBusy;
+  if (mapperAnalyzeBtn) mapperAnalyzeBtn.disabled = isBusy;
+  if (mapperFileInput) mapperFileInput.disabled = isBusy;
+  if (mapperParseBtn) mapperParseBtn.disabled = isBusy;
+  if (mapperClearBtn) mapperClearBtn.disabled = isBusy;
+  if (mapperApplyAllBtn) mapperApplyAllBtn.disabled = isBusy || spendingImportState.entries.length === 0;
+  if (mapperApiKeyInput) mapperApiKeyInput.disabled = isBusy;
+  renderMapperEntries();
+}
+
+function generateImportId() {
+  if (window.crypto?.randomUUID) {
+    return `import-${crypto.randomUUID()}`;
+  }
+  return `import-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+}
+
+function normalizeImportEntry(entry) {
+  if (!entry) return null;
+  const label = typeof entry.label === 'string' && entry.label.trim() ? entry.label.trim() : 'Imported item';
+  const amount = Math.abs(Number.parseFloat(entry.amount));
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return null;
+  }
+  const frequency = sanitizeFrequency(entry.frequency);
+  return {
+    id: generateImportId(),
+    label,
+    amount,
+    frequency,
+    targetId: entry.targetId || '',
+    notes: typeof entry.notes === 'string' ? entry.notes : '',
+  };
+}
+
+function guessMapperTarget(entry) {
+  if (!entry || !entry.label) {
+    return '';
+  }
+  const label = entry.label.toLowerCase();
+  let bestMatch = '';
+  let bestScore = 0;
+  state.categories.forEach((category) => {
+    const name = category.name.toLowerCase();
+    if (name === label) {
+      bestMatch = category.id;
+      bestScore = 3;
+      return;
+    }
+    if (bestScore < 2 && (label.includes(name) || name.includes(label))) {
+      bestMatch = category.id;
+      bestScore = 2;
+      return;
+    }
+    if (bestScore < 1) {
+      const labelTokens = label.split(/\s+/).filter((token) => token.length >= 4);
+      if (labelTokens.some((token) => name.includes(token))) {
+        bestMatch = category.id;
+        bestScore = 1;
+      }
+    }
+  });
+  return bestMatch;
+}
+
+function populateMapperTargetOptions(select, entry, categories) {
+  if (!select) return;
+  select.innerHTML = '';
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = 'Choose destination';
+  select.appendChild(placeholder);
+
+  const trimmedLabel = entry.label.length > 28 ? `${entry.label.slice(0, 26)}…` : entry.label;
+  const createOption = document.createElement('option');
+  createOption.value = '__new__';
+  createOption.textContent = `Create new “${trimmedLabel}”`;
+  select.appendChild(createOption);
+
+  categories.forEach((category) => {
+    const option = document.createElement('option');
+    option.value = category.id;
+    option.textContent = category.recommended ? `★ ${category.name}` : category.name;
+    select.appendChild(option);
+  });
+
+  if (entry.targetId && (entry.targetId === '__new__' || categories.some((cat) => cat.id === entry.targetId))) {
+    select.value = entry.targetId;
+  } else {
+    select.value = '';
+  }
+}
+
+function addImportEntries(entries, sourceLabel) {
+  if (!Array.isArray(entries) || !entries.length) {
+    updateMapperStatus('No recognizable spending entries were found.', 'error');
+    return;
+  }
+  const normalized = entries
+    .map((entry) => normalizeImportEntry(entry))
+    .filter(Boolean);
+  if (!normalized.length) {
+    updateMapperStatus('Entries were detected but no valid amounts were found.', 'error');
+    return;
+  }
+  normalized.forEach((entry) => {
+    ensureMapperTarget(entry);
+    spendingImportState.entries.push(entry);
+  });
+  renderMapperEntries();
+  updateMapperStatus(`Loaded ${normalized.length} entr${normalized.length === 1 ? 'y' : 'ies'} from ${sourceLabel}.`, 'success');
+}
+
+function clearImportEntries() {
+  spendingImportState.entries = [];
+  renderMapperEntries();
+  updateMapperStatus('Cleared imported spending entries.');
+}
+
+function removeImportEntry(entryId) {
+  spendingImportState.entries = spendingImportState.entries.filter((entry) => entry.id !== entryId);
+  renderMapperEntries();
+}
+
+function applyImportEntry(entryId) {
+  const entry = spendingImportState.entries.find((item) => item.id === entryId);
+  if (!entry) {
+    updateMapperStatus('Entry not found. Refresh and try again.', 'error');
+    return false;
+  }
+  if (!entry.targetId) {
+    updateMapperStatus('Choose a destination before applying this entry.', 'error');
+    return false;
+  }
+
+  if (entry.targetId === '__new__') {
+    addCustomCategory(entry.label, entry.amount, entry.frequency, entry.notes || 'Imported via Spending Mapper');
+    removeImportEntry(entryId);
+    updateMapperStatus(`Added ${entry.label} to your budget.`, 'success');
+    return true;
+  }
+
+  const category = state.categories.find((item) => item.id === entry.targetId);
+  if (!category) {
+    updateMapperStatus('The selected category no longer exists. Pick another destination.', 'error');
+    return false;
+  }
+
+  updateCategoryFrequency(category.id, entry.frequency);
+  const updated = updateCategoryEntryAmount(category.id, entry.amount);
+  if (updated) {
+    renderBudgetTable();
+    removeImportEntry(entryId);
+    updateMapperStatus(`Updated ${category.name} with ${formatCurrency(entry.amount)} ${entry.frequency}.`, 'success');
+    return true;
+  }
+  updateMapperStatus('Unable to update that category. Try again.', 'error');
+  return false;
+}
+
+function applyAllImportEntries() {
+  if (!spendingImportState.entries.length) {
+    updateMapperStatus('No entries to apply. Import data first.', 'error');
+    return;
+  }
+  const pending = [...spendingImportState.entries];
+  let appliedCount = 0;
+  pending.forEach((entry) => {
+    const success = applyImportEntry(entry.id);
+    if (success) {
+      appliedCount += 1;
+    }
+  });
+  if (appliedCount) {
+    updateMapperStatus(`Applied ${appliedCount} entr${appliedCount === 1 ? 'y' : 'ies'} to your budget.`, 'success');
+  }
+}
+
+function parseManualSpending(text) {
+  if (!text) return [];
+  const lines = text
+    .split(/\n+/)
+    .map((line) => line.replace(/[\u2013\u2014]/g, '-').trim())
+    .filter(Boolean);
+  const entries = [];
+  lines.forEach((line) => {
+    const amountMatch = line.match(/-?\$?\s*([0-9][0-9.,]*)/);
+    if (!amountMatch) {
+      return;
+    }
+    const rawAmount = amountMatch[0];
+    const numericAmount = Math.abs(Number.parseFloat(rawAmount.replace(/[^0-9.-]/g, '')));
+    if (!Number.isFinite(numericAmount) || numericAmount === 0) {
+      return;
+    }
+
+    let workingLine = line.replace(rawAmount, ' ');
+    const frequencyTokens = [
+      { regex: /(biweekly|fortnight)/i, frequency: 'weekly', adjust: (value) => value / 2 },
+      { regex: /(daily|per\s*day)/i, frequency: 'daily', adjust: (value) => value },
+      { regex: /(weekly|per\s*week|\bweek\b)/i, frequency: 'weekly', adjust: (value) => value },
+      { regex: /(monthly|per\s*month|\bmonth\b|mo\b)/i, frequency: 'monthly', adjust: (value) => value },
+      { regex: /(yearly|annual|per\s*year|\byear\b)/i, frequency: 'monthly', adjust: (value) => value / 12 },
+    ];
+
+    let frequency = 'monthly';
+    let adjustedAmount = numericAmount;
+    frequencyTokens.some((token) => {
+      if (token.regex.test(workingLine)) {
+        workingLine = workingLine.replace(token.regex, ' ');
+        frequency = token.frequency;
+        adjustedAmount = token.adjust(numericAmount);
+        return true;
+      }
+      return false;
+    });
+
+    workingLine = workingLine.replace(/[-:,]+/g, ' ');
+    const label = workingLine.replace(/\s+/g, ' ').trim();
+    entries.push({
+      label: label || 'Imported item',
+      amount: adjustedAmount,
+      frequency,
+      notes: 'Manual mapper import',
+    });
+  });
+  return entries;
+}
+
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      const base64 = typeof result === 'string' ? result.split(',').pop() : '';
+      if (!base64) {
+        reject(new Error('Unable to read the selected file.'));
+      } else {
+        resolve(base64);
+      }
+    };
+    reader.onerror = () => reject(reader.error || new Error('Unable to read the selected file.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function analyzeStatementWithAI(file, apiKey) {
+  if (!file) {
+    throw new Error('Choose an image before analyzing.');
+  }
+  if (!apiKey) {
+    throw new Error('Provide an OpenAI API key to analyze statements.');
+  }
+  if (typeof fetch !== 'function') {
+    throw new Error('This browser cannot make the required API request. Try manual entry instead.');
+  }
+  const base64 = await readFileAsBase64(file);
+  const requestBody = {
+    model: 'gpt-4o-mini',
+    response_format: {
+      type: 'json_schema',
+      json_schema: {
+        name: 'statement_summary',
+        schema: {
+          type: 'object',
+          properties: {
+            transactions: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  label: { type: 'string' },
+                  amount: { type: 'number' },
+                  cadence: {
+                    type: 'string',
+                    enum: ['daily', 'weekly', 'biweekly', 'monthly', 'yearly'],
+                    nullable: true,
+                  },
+                  notes: { type: 'string', nullable: true },
+                },
+                required: ['label', 'amount'],
+                additionalProperties: false,
+              },
+            },
+          },
+          required: ['transactions'],
+          additionalProperties: false,
+        },
+      },
+    },
+    messages: [
+      {
+        role: 'system',
+        content:
+          'You extract personal budget categories from bank statement screenshots. Return concise categories and total amounts.',
+      },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Identify recurring spending categories and their amounts from this statement.' },
+          {
+            type: 'image_url',
+            image_url: {
+              detail: 'low',
+              url: `data:${file.type || 'image/png'};base64,${base64}`,
+            },
+          },
+        ],
+      },
+    ],
+  };
+
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(requestBody),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`OpenAI API responded with ${response.status}: ${errorText}`);
+  }
+
+  const payload = await response.json();
+  const content = payload?.choices?.[0]?.message?.content;
+  if (!content) {
+    throw new Error('OpenAI response did not include any content.');
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(content);
+  } catch (error) {
+    throw new Error('Unable to parse OpenAI response.');
+  }
+
+  if (!parsed?.transactions || !Array.isArray(parsed.transactions)) {
+    throw new Error('OpenAI response did not include recognizable transactions.');
+  }
+
+  return parsed.transactions.map((transaction) => {
+    const frequency = (() => {
+      const raw = typeof transaction.cadence === 'string' ? transaction.cadence.toLowerCase() : '';
+      if (raw === 'biweekly') {
+        return 'weekly';
+      }
+      if (raw === 'yearly' || raw === 'annual') {
+        return 'monthly';
+      }
+      if (entryFrequencies.includes(raw)) {
+        return raw;
+      }
+      return 'monthly';
+    })();
+    let amount = Number(transaction.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return null;
+    }
+    if (typeof transaction.cadence === 'string' && transaction.cadence.toLowerCase() === 'biweekly') {
+      amount = amount / 2;
+    } else if (typeof transaction.cadence === 'string' && transaction.cadence.toLowerCase().includes('year')) {
+      amount = amount / 12;
+    }
+    return {
+      label: transaction.label,
+      amount,
+      frequency,
+      notes: transaction.notes || 'AI-assisted import',
+    };
+  }).filter(Boolean);
 }
 
 function renderFinalShowcase() {
@@ -1058,12 +1604,14 @@ function exportFinalShowcase() {
 }
 
 function renderAll() {
+  syncAllCategoryAmounts();
   renderIncomeSnapshot();
   renderBudgetTable();
   renderSummary();
   renderFutureForecast();
   renderFinalShowcase();
   renderInsights();
+  renderMapperEntries();
   scheduleStateSave();
 }
 
@@ -1089,6 +1637,20 @@ function applyTheme(theme) {
   scheduleStateSave();
 }
 
+function updateFocusToggleLabel() {
+  if (!startFocusToggle) return;
+  startFocusToggle.textContent = focusModeEnabled ? '🎯 Disable focus mode' : '🎯 Enable focus mode';
+}
+
+function setFocusMode(enabled) {
+  focusModeEnabled = Boolean(enabled);
+  if (body) {
+    body.classList.toggle('focus-mode-active', focusModeEnabled);
+  }
+  updateFocusToggleLabel();
+  updateTaskbarActiveState(activeWindowId);
+}
+
 function updateTaskbarActiveState(activeId) {
   windowRegistry.forEach((record) => {
     if (!record.taskbarButton) return;
@@ -1100,6 +1662,9 @@ function updateTaskbarActiveState(activeId) {
       record.state === 'open' ? 'Open' : record.state === 'minimized' ? 'Minimized' : 'Closed';
     record.taskbarButton.title = `${record.title} — ${stateLabel}`;
     record.taskbarButton.setAttribute('aria-label', `${record.title} window (${stateLabel})`);
+    if (record.element) {
+      record.element.classList.toggle('is-active-window', isActive);
+    }
   });
   const activeRecord = activeId ? windowRegistry.get(activeId) : null;
   activeWindowId = activeRecord && activeRecord.state === 'open' ? activeId : null;
@@ -1411,6 +1976,90 @@ function toggleMaximizeWindow(id) {
   updateWindowControlIcons(record.element);
   bringToFront(record.element);
   updateTaskbarActiveState(id);
+}
+
+function getOpenWindowRecords() {
+  return Array.from(windowRegistry.values()).filter((record) => record.state === 'open');
+}
+
+function cascadeWindows() {
+  if (!appFrame || !shouldEnableWindowMode()) {
+    return;
+  }
+  initializeWindowSystem();
+  const openWindows = getOpenWindowRecords();
+  if (!openWindows.length) {
+    return;
+  }
+  const frameRect = appFrame.getBoundingClientRect();
+  const stepX = 36;
+  const stepY = 30;
+  const baseLeft = 32;
+  const baseTop = 40;
+  openWindows.forEach((record, index) => {
+    const panel = record.element;
+    if (!panel) return;
+    const minWidth = Number(panel.dataset.minWidth) || 320;
+    const minHeight = Number(panel.dataset.minHeight) || 260;
+    const width = Math.max(minWidth, Math.min(frameRect.width - baseLeft, Number(panel.dataset.width) || panel.offsetWidth));
+    const height = Math.max(minHeight, Math.min(frameRect.height - baseTop, Number(panel.dataset.height) || panel.offsetHeight));
+    const left = clamp(baseLeft + stepX * index, 0, Math.max(0, frameRect.width - width));
+    const top = clamp(baseTop + stepY * index, 0, Math.max(0, frameRect.height - height));
+    panel.style.width = `${width}px`;
+    panel.style.height = `${height}px`;
+    panel.dataset.width = String(width);
+    panel.dataset.height = String(height);
+    panel.style.left = `${left}px`;
+    panel.style.top = `${top}px`;
+    panel.dataset.x = String(left);
+    panel.dataset.y = String(top);
+    panel.dataset.maximized = 'false';
+    record.maximized = false;
+    record.state = 'open';
+  });
+  updateTaskbarActiveState(activeWindowId);
+}
+
+function tileWindows() {
+  if (!appFrame || !shouldEnableWindowMode()) {
+    return;
+  }
+  initializeWindowSystem();
+  const openWindows = getOpenWindowRecords();
+  if (!openWindows.length) {
+    return;
+  }
+  const frameRect = appFrame.getBoundingClientRect();
+  const total = openWindows.length;
+  const columns = Math.max(1, Math.ceil(Math.sqrt(total)));
+  const rows = Math.max(1, Math.ceil(total / columns));
+  const cellWidth = frameRect.width / columns;
+  const cellHeight = frameRect.height / rows;
+  openWindows.forEach((record, index) => {
+    const panel = record.element;
+    if (!panel) return;
+    const col = index % columns;
+    const row = Math.floor(index / columns);
+    const minWidth = Number(panel.dataset.minWidth) || 320;
+    const minHeight = Number(panel.dataset.minHeight) || 260;
+    const width = Math.max(minWidth, Math.min(cellWidth - 20, frameRect.width));
+    const height = Math.max(minHeight, Math.min(cellHeight - 24, frameRect.height));
+    const left = clamp(col * cellWidth + (cellWidth - width) / 2, 0, Math.max(0, frameRect.width - width));
+    const top = clamp(row * cellHeight + (cellHeight - height) / 2, 0, Math.max(0, frameRect.height - height));
+    panel.style.width = `${width}px`;
+    panel.style.height = `${height}px`;
+    panel.dataset.width = String(width);
+    panel.dataset.height = String(height);
+    panel.style.left = `${left}px`;
+    panel.style.top = `${top}px`;
+    panel.dataset.x = String(left);
+    panel.dataset.y = String(top);
+    panel.dataset.maximized = 'false';
+    record.maximized = false;
+    record.state = 'open';
+    constrainPanelToFrame(panel, frameRect);
+  });
+  updateTaskbarActiveState(activeWindowId);
 }
 
 function toggleWindowFromTaskbar(id) {
@@ -2454,6 +3103,7 @@ if (startMenu) {
     const theme = button.dataset.theme;
     const activateScreensaver = button.hasAttribute('data-activate-screensaver');
     const resetBudget = button.hasAttribute('data-reset-budget');
+    const action = button.dataset.action;
     if (windowId) {
       openWindow(windowId);
       if (windowId === 'snake') {
@@ -2472,6 +3122,96 @@ if (startMenu) {
     } else if (activateScreensaver) {
       closeStartMenu();
       activateScreensaverMode();
+    } else if (action === 'cascade-windows') {
+      cascadeWindows();
+      closeStartMenu();
+    } else if (action === 'tile-windows') {
+      tileWindows();
+      closeStartMenu();
+    } else if (action === 'toggle-focus') {
+      setFocusMode(!focusModeEnabled);
+      closeStartMenu();
+    }
+  });
+}
+
+if (mapperParseBtn) {
+  mapperParseBtn.addEventListener('click', () => {
+    if (spendingImportState.busy) return;
+    const text = mapperManualInput?.value || '';
+    const entries = parseManualSpending(text);
+    if (entries.length) {
+      addImportEntries(entries, 'manual entry');
+    } else {
+      updateMapperStatus('No recognizable lines were found. Try “Groceries - 125 - weekly”.', 'error');
+    }
+  });
+}
+
+if (mapperClearBtn) {
+  mapperClearBtn.addEventListener('click', () => {
+    if (spendingImportState.busy) return;
+    clearImportEntries();
+  });
+}
+
+if (mapperApplyAllBtn) {
+  mapperApplyAllBtn.addEventListener('click', () => {
+    if (spendingImportState.busy) return;
+    applyAllImportEntries();
+  });
+}
+
+if (mapperResultsBody) {
+  mapperResultsBody.addEventListener('change', (event) => {
+    if (spendingImportState.busy) return;
+    const target = event.target;
+    if (target instanceof HTMLSelectElement) {
+      const entryId = target.dataset.entryId;
+      if (!entryId) return;
+      const entry = spendingImportState.entries.find((item) => item.id === entryId);
+      if (!entry) return;
+      if (target.classList.contains('mapper-frequency')) {
+        entry.frequency = sanitizeFrequency(target.value);
+        renderMapperEntries();
+      } else if (target.classList.contains('mapper-target')) {
+        entry.targetId = target.value;
+      }
+    }
+  });
+
+  mapperResultsBody.addEventListener('click', (event) => {
+    const button = event.target.closest('.mapper-apply');
+    if (!button || spendingImportState.busy) return;
+    const entryId = button.dataset.entryId;
+    if (entryId) {
+      applyImportEntry(entryId);
+    }
+  });
+}
+
+if (mapperAnalyzeBtn) {
+  mapperAnalyzeBtn.addEventListener('click', async () => {
+    if (spendingImportState.busy) return;
+    try {
+      setMapperBusy(true);
+      updateMapperStatus('Contacting OpenAI for analysis…');
+      const file = mapperFileInput?.files?.[0] || null;
+      const apiKey = mapperApiKeyInput?.value?.trim();
+      const entries = await analyzeStatementWithAI(file, apiKey);
+      setMapperBusy(false);
+      if (entries.length) {
+        addImportEntries(entries, 'AI analysis');
+      } else {
+        updateMapperStatus('OpenAI did not detect recurring categories in that screenshot.', 'error');
+      }
+    } catch (error) {
+      setMapperBusy(false);
+      updateMapperStatus(error.message, 'error');
+      if (mapperAiNotice) {
+        mapperAiNotice.textContent =
+          'AI import requires an active internet connection and a valid OpenAI API key. Manual entry always works offline.';
+      }
     }
   });
 }

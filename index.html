@@ -256,6 +256,7 @@
         </header>
         <div class="window-body">
           <div class="pulse-grid" id="summaryGrid"></div>
+          <div class="budget-health" id="budgetHealth" hidden></div>
           <div class="summary-actions">
             <button
               class="btn-secondary"
@@ -336,6 +337,113 @@
               <input type="checkbox" id="autoThemeToggle" />
               <span>Auto-cycle themes</span>
             </label>
+          </div>
+        </div>
+      </section>
+      <section
+        class="panel window panel-mapper hidden-window"
+        aria-labelledby="panelMapperTitle"
+        data-window-id="mapper"
+        data-window-title="Spending Mapper"
+        data-initial-state="closed"
+        data-width="560"
+        data-height="620"
+        data-min-width="420"
+        data-min-height="420"
+        data-x="180"
+        data-y="92"
+      >
+        <header class="window-header" data-drag-handle>
+          <h2 class="window-title" id="panelMapperTitle">Spending Mapper</h2>
+          <div class="window-controls">
+            <button
+              class="window-control"
+              data-window-action="minimize"
+              type="button"
+              title="Minimize window"
+              aria-label="Minimize window"
+            >
+              <span class="window-control__icon" aria-hidden="true">–</span>
+              <span class="visually-hidden">Minimize Spending Mapper window</span>
+            </button>
+            <button
+              class="window-control"
+              data-window-action="maximize"
+              type="button"
+              title="Maximize window"
+              aria-label="Maximize window"
+            >
+              <span class="window-control__icon" aria-hidden="true">▢</span>
+              <span class="visually-hidden">Maximize Spending Mapper window</span>
+            </button>
+            <button
+              class="window-control"
+              data-window-action="close"
+              type="button"
+              title="Close window"
+              aria-label="Close window"
+            >
+              <span class="window-control__icon" aria-hidden="true">✕</span>
+              <span class="visually-hidden">Close Spending Mapper window</span>
+            </button>
+          </div>
+        </header>
+        <div class="window-body mapper-body">
+          <p class="mapper-lead">
+            Import a bank statement screenshot or paste a spending summary. You can refine the
+            detected categories before applying them to your budget.
+          </p>
+          <div class="mapper-ai">
+            <h3>AI-assisted import</h3>
+            <p>
+              Provide your <abbr title="Application Programming Interface">API</abbr> key and upload
+              a screenshot. Data stays on this device and sends directly to OpenAI.
+            </p>
+            <label class="mapper-field">
+              API key
+              <input type="password" id="mapperApiKey" autocomplete="off" placeholder="sk-..." />
+            </label>
+            <label class="mapper-field">
+              Statement image
+              <input type="file" id="mapperFile" accept="image/*" />
+            </label>
+            <button type="button" class="btn-secondary" id="mapperAnalyzeBtn">Analyze with AI</button>
+            <p class="mapper-note" id="mapperAiNotice">
+              Don’t have an API key or prefer manual control? Use the manual entry area below.
+            </p>
+          </div>
+          <div class="mapper-manual">
+            <h3>Manual entry</h3>
+            <p>
+              Paste text such as “Groceries - 125.32 - weekly” on separate lines. Frequencies are
+              optional.
+            </p>
+            <textarea id="mapperManualInput" rows="6" placeholder="Category - Amount - cadence"></textarea>
+            <div class="mapper-actions">
+              <button type="button" class="btn-secondary" id="mapperParseBtn">Parse text</button>
+              <button type="button" class="btn-tertiary" id="mapperClearBtn">Clear</button>
+            </div>
+          </div>
+          <div class="mapper-results">
+            <div class="mapper-results__header">
+              <h3>Detected entries</h3>
+              <button type="button" class="btn-secondary" id="mapperApplyAllBtn">Apply all to budget</button>
+            </div>
+            <div class="mapper-status" id="mapperStatus" role="status" aria-live="polite"></div>
+            <div class="mapper-table-wrapper">
+              <table class="mapper-table" aria-describedby="panelMapperTitle">
+                <thead>
+                  <tr>
+                    <th scope="col">Label</th>
+                    <th scope="col">Amount</th>
+                    <th scope="col">Cadence</th>
+                    <th scope="col">Map to</th>
+                    <th scope="col">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="mapperResultsBody"></tbody>
+              </table>
+            </div>
           </div>
         </div>
       </section>
@@ -491,6 +599,26 @@
       </tr>
     </template>
 
+    <template id="mapperRowTemplate">
+      <tr>
+        <td class="mapper-col--label"></td>
+        <td class="mapper-col--amount"></td>
+        <td>
+          <select class="mapper-frequency">
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+            <option value="daily">Daily</option>
+          </select>
+        </td>
+        <td>
+          <select class="mapper-target"></select>
+        </td>
+        <td>
+          <button type="button" class="btn-tertiary mapper-apply">Apply</button>
+        </td>
+      </tr>
+    </template>
+
     <div class="start-menu" id="startMenu" role="menu" aria-hidden="true">
       <div class="start-menu__sidebar">
         <span class="start-menu__brand">Budget<br />Builder</span>
@@ -513,11 +641,26 @@
           </button>
         </div>
         <div class="start-menu__group">
+          <h3>Data tools</h3>
+          <button class="start-menu__item" data-open-window="mapper">
+            🧾 Spending Mapper
+          </button>
+          <button class="start-menu__item" data-action="cascade-windows">
+            🪟 Cascade all windows
+          </button>
+          <button class="start-menu__item" data-action="tile-windows">
+            🧱 Tile windows side-by-side
+          </button>
+          <button class="start-menu__item" data-action="toggle-focus">
+            🎯 Toggle focus mode
+          </button>
+        </div>
+        <div class="start-menu__group">
           <h3>Aesthetics</h3>
-          <button class="start-menu__item" data-theme="win95">Windows 95</button>
-          <button class="start-menu__item" data-theme="xp">Windows XP Bliss</button>
-          <button class="start-menu__item" data-theme="vista">Windows Vista</button>
-          <button class="start-menu__item" data-theme="mac">2000s Macintosh</button>
+          <button class="start-menu__item" data-theme="win95" data-theme-preview="win95">Windows 95</button>
+          <button class="start-menu__item" data-theme="xp" data-theme-preview="xp">Windows XP Bliss</button>
+          <button class="start-menu__item" data-theme="vista" data-theme-preview="vista">Windows Vista</button>
+          <button class="start-menu__item" data-theme="mac" data-theme-preview="mac">2000s Macintosh</button>
         </div>
       </div>
     </div>

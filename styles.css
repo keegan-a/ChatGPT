@@ -38,6 +38,8 @@
   --start-menu-sidebar-text: #ffffff;
   --start-menu-item-hover: #0a5ec7;
   --start-menu-item-hover-text: #ffffff;
+  --start-menu-item-bg: rgba(255, 255, 255, 0.85);
+  --start-menu-item-text: #111111;
   --start-menu-divider: rgba(0, 0, 0, 0.1);
   --taskbar-button-active: #dfe3e8;
   --snake-grid: #d0d0d0;
@@ -64,6 +66,8 @@ body.theme-win95 {
   --pipes-c: #f2ff9a;
   --screensaver-trail: rgba(0, 0, 0, 0.24);
   --wallpaper-overlay-opacity: 0.22;
+  --start-menu-item-bg: rgba(255, 255, 255, 0.92);
+  --start-menu-item-text: #0c2233;
 }
 
 body.theme-win95::before {
@@ -113,6 +117,8 @@ body.theme-vista {
   --start-menu-sidebar-text: #ffffff;
   --start-menu-item-hover: rgba(66, 135, 195, 0.95);
   --start-menu-item-hover-text: #ffffff;
+  --start-menu-item-bg: rgba(232, 243, 255, 0.94);
+  --start-menu-item-text: #0f2542;
   --start-menu-divider: rgba(30, 60, 100, 0.25);
   --taskbar-button-active: rgba(255, 255, 255, 0.25);
   --snake-grid: rgba(200, 220, 245, 0.9);
@@ -178,6 +184,8 @@ body.theme-mac {
   --start-menu-sidebar-text: #1e2a3c;
   --start-menu-item-hover: rgba(190, 205, 255, 0.95);
   --start-menu-item-hover-text: #1e2a3c;
+  --start-menu-item-bg: rgba(244, 248, 255, 0.94);
+  --start-menu-item-text: #1e2a3c;
   --start-menu-divider: rgba(140, 140, 160, 0.25);
   --taskbar-button-active: rgba(210, 220, 255, 0.8);
   --snake-grid: rgba(210, 220, 255, 0.85);
@@ -242,6 +250,8 @@ body.theme-xp {
   --start-menu-sidebar-text: #ffffff;
   --start-menu-item-hover: rgba(32, 96, 172, 0.95);
   --start-menu-item-hover-text: #ffffff;
+  --start-menu-item-bg: rgba(255, 255, 255, 0.94);
+  --start-menu-item-text: #102042;
   --start-menu-divider: rgba(20, 60, 120, 0.22);
   --taskbar-button-active: rgba(255, 255, 255, 0.26);
   --snake-grid: rgba(210, 228, 255, 0.92);
@@ -378,6 +388,17 @@ body::before {
 .panel.resizing {
   transition: none;
   box-shadow: 14px 14px 0 rgba(0, 0, 0, 0.4);
+}
+
+body.focus-mode-active .panel.window {
+  opacity: 0.35;
+  filter: saturate(0.6) brightness(0.92);
+}
+
+body.focus-mode-active .panel.window.is-active-window {
+  opacity: 1;
+  filter: none;
+  box-shadow: 14px 14px 0 rgba(0, 0, 0, 0.45);
 }
 
 .window-header {
@@ -693,10 +714,218 @@ select:focus {
   color: var(--titlebar-active-start);
 }
 
+.btn-tertiary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--body-text);
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.btn-tertiary:hover,
+.btn-tertiary:focus-visible {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: var(--titlebar-active-end);
+  outline: none;
+}
+
+.mapper-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.mapper-lead {
+  margin: 0;
+  color: var(--muted-text);
+  line-height: 1.6;
+}
+
+.mapper-ai,
+.mapper-manual,
+.mapper-results {
+  background: var(--surface-elevated);
+  border-radius: 8px;
+  padding: 14px 16px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+}
+
+.mapper-ai h3,
+.mapper-manual h3,
+.mapper-results h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.mapper-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+
+.mapper-field input[type='password'],
+.mapper-field input[type='file'] {
+  padding: 6px 8px;
+  background: var(--input-bg);
+  border: 1px solid var(--chip-border);
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.mapper-note {
+  font-size: 12px;
+  color: var(--muted-text);
+  margin: 6px 0 0;
+}
+
+.mapper-manual textarea {
+  width: 100%;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid var(--chip-border);
+  background: var(--input-bg);
+  font-size: 13px;
+  resize: vertical;
+}
+
+.mapper-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.mapper-results__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.mapper-status {
+  min-height: 20px;
+  font-size: 12px;
+  color: var(--muted-text);
+  margin-bottom: 8px;
+}
+
+.mapper-status[data-tone='error'] {
+  color: var(--danger-red);
+}
+
+.mapper-status[data-tone='success'] {
+  color: var(--success-green);
+}
+
+.mapper-table-wrapper {
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid var(--chip-border);
+  border-radius: 6px;
+}
+
+.mapper-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.mapper-table th,
+.mapper-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  text-align: left;
+}
+
+.mapper-table tbody tr:nth-child(even) {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.mapper-col--amount {
+  font-variant-numeric: tabular-nums;
+}
+
+.mapper-table select {
+  width: 100%;
+  padding: 4px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--chip-border);
+  background: var(--input-bg);
+  font-size: 12px;
+}
+
+.mapper-table button {
+  white-space: nowrap;
+}
+
+.mapper-empty {
+  text-align: center;
+  color: var(--muted-text);
+  padding: 18px 12px;
+  font-size: 13px;
+}
+
 .summary-actions {
   display: flex;
   justify-content: flex-end;
   margin-bottom: 18px;
+}
+
+.budget-health {
+  margin-bottom: 18px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--surface-elevated);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.budget-health__label {
+  font-size: 13px;
+  color: var(--muted-text);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.budget-health__meter {
+  position: relative;
+  height: 12px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+
+.budget-health__fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, #2f9e44 0%, #f5b700 60%, #d00000 100%);
+  transform-origin: left center;
+  transition: transform 0.3s ease;
+}
+
+.budget-health__goal {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  background: var(--titlebar-active-end);
+  opacity: 0.7;
 }
 
 .pulse-grid {
@@ -1392,8 +1621,8 @@ body.theme-mac .taskbar-button {
   font-size: 13px;
   font-family: var(--font-body);
   border: none;
-  background: transparent;
-  color: var(--body-text);
+  background: var(--start-menu-item-bg);
+  color: var(--start-menu-item-text);
   cursor: pointer;
   border-radius: 4px;
   transition: background 0.15s ease, color 0.15s ease;
@@ -1408,6 +1637,42 @@ body.theme-mac .taskbar-button {
   background: var(--start-menu-item-hover);
   color: var(--start-menu-item-hover-text);
   outline: none;
+}
+
+.start-menu__item[data-theme-preview] {
+  position: relative;
+  padding-left: 56px;
+}
+
+.start-menu__item[data-theme-preview]::before {
+  content: '';
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  width: 34px;
+  height: 22px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+  transform: translateY(-50%);
+  background-size: cover;
+  background-position: center;
+}
+
+.start-menu__item[data-theme-preview='win95']::before {
+  background-image: linear-gradient(180deg, #7ec0ee 0%, #5fa4d8 45%, #73b144 60%, #2f6c32 100%);
+}
+
+.start-menu__item[data-theme-preview='xp']::before {
+  background-image: linear-gradient(185deg, #7fc1ff 0%, #b9e5ff 55%, #4eb945 56%, #1e7c1f 100%);
+}
+
+.start-menu__item[data-theme-preview='vista']::before {
+  background-image: linear-gradient(160deg, #4e8ccf 0%, #144d92 60%, #0b1f3f 100%);
+}
+
+.start-menu__item[data-theme-preview='mac']::before {
+  background-image: linear-gradient(160deg, #1e3a8a 0%, #3b82f6 35%, #8b5cf6 70%, #fca5a5 100%);
 }
 
 .start-menu__status {
