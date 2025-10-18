@@ -32,13 +32,19 @@ async function copyIcons() {
   const srcIconsDir = path.join(root, 'icons');
   const distIconsDir = path.join(dist, 'icons');
 
+  let srcIconsStat;
   try {
-    const stat = await fs.stat(srcIconsDir);
-    if (!stat.isDirectory()) {
-      throw new Error('icons path is not a directory');
-    }
+    srcIconsStat = await fs.stat(srcIconsDir);
   } catch (error) {
-    throw new Error('Missing icons directory. Add your icon files to ./icons before packaging.');
+    if (process.env.BUDGET95_STRICT_ICON_MODE === '1') {
+      throw new Error('Missing icons directory. Add your icon files to ./icons before packaging.');
+    }
+    console.warn('No ./icons directory detected. Skipping icon copy step and falling back to default Electron artwork.');
+    return;
+  }
+
+  if (!srcIconsStat.isDirectory()) {
+    throw new Error('icons path is not a directory');
   }
 
   await fs.mkdir(distIconsDir, { recursive: true });
@@ -65,16 +71,13 @@ async function copyIcons() {
     }
   }
 
-  if (!missing.length) {
-    return;
+  if (missing.length && process.env.BUDGET95_STRICT_ICON_MODE === '1') {
+    throw new Error(`Missing required icon assets: ${missing.join(', ')}. Place the files in ./icons before running packaging commands.`);
   }
 
-  if (process.env.BUDGET95_SKIP_ICON_CHECK === '1') {
-    console.warn(`Warning: missing icon assets (${missing.join(', ')}). Packaging commands will fail until you add them to ./icons.`);
-    return;
+  if (missing.length) {
+    console.warn(`Icon files missing (${missing.join(', ')}). Electron Builder will use its default icons unless you add replacements to ./icons.`);
   }
-
-  throw new Error(`Missing required icon assets: ${missing.join(', ')}. Place the files in ./icons before running packaging commands.`);
 }
 
 async function ensurePdfjsAsset(fileName, url) {

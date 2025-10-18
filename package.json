@@ -43,19 +43,15 @@
     "extraResources": [
       "dist"
     ],
-    "publish": null,
+    "publish": [],
     "win": {
-      "target": "nsis",
-      "icon": "dist/icons/budget95.ico",
-      "differentialPackage": false
+      "target": "nsis"
     },
     "mac": {
-      "target": "dmg",
-      "icon": "dist/icons/budget95.icns"
+      "target": "dmg"
     },
     "linux": {
-      "target": "AppImage",
-      "icon": "dist/icons"
+      "target": "AppImage"
     }
   }
 }
