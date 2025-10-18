@@ -7,7 +7,21 @@ const nodeCmd = process.execPath;
 
 function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { stdio: 'inherit', ...options });
+    const spawnOptions = { stdio: 'inherit', ...options };
+
+    if (process.platform === 'win32' && typeof spawnOptions.shell === 'undefined') {
+      const lowerCommand = command.toLowerCase();
+      const needsShell =
+        lowerCommand.endsWith('.cmd') ||
+        lowerCommand.endsWith('.bat') ||
+        path.extname(lowerCommand) === '';
+
+      if (needsShell) {
+        spawnOptions.shell = true;
+      }
+    }
+
+    const child = spawn(command, args, spawnOptions);
     child.on('close', (code) => {
       if (code === 0) {
         resolve();
