@@ -4,26 +4,10 @@ const path = require('path');
 
 const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const nodeCmd = process.execPath;
-const electronBuilderCmd = process.platform === 'win32'
-  ? path.join(process.cwd(), 'node_modules', '.bin', 'electron-builder.cmd')
-  : path.join(process.cwd(), 'node_modules', '.bin', 'electron-builder');
 
 function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
-    const spawnOptions = { stdio: 'inherit', ...options };
-
-    if (process.platform === 'win32' && typeof spawnOptions.shell === 'undefined') {
-      const lowerCommand = command.toLowerCase();
-      const needsShell =
-        lowerCommand.endsWith('.cmd') ||
-        lowerCommand.endsWith('.bat') ||
-        path.extname(lowerCommand) === '';
-
-      if (needsShell) {
-        spawnOptions.shell = true;
-      }
-    }
-
+    const spawnOptions = { stdio: 'inherit', shell: false, ...options };
     const child = spawn(command, args, spawnOptions);
     child.on('close', (code) => {
       if (code === 0) {
@@ -41,9 +25,16 @@ function run(command, args, options = {}) {
   console.log(`Using build tag: ${buildTag}`);
 
   try {
-    await run(npmCmd, ['run', 'prepare:web'], {
-      env: { ...process.env },
-    });
+    const npmExecPath = process.env.npm_execpath;
+    if (npmExecPath && npmExecPath.endsWith('.js')) {
+      await run(nodeCmd, [npmExecPath, 'run', 'prepare:web'], {
+        env: { ...process.env },
+      });
+    } else {
+      await run(npmCmd, ['run', 'prepare:web'], {
+        env: { ...process.env },
+      });
+    }
 
     await run(nodeCmd, [path.join(__dirname, 'clean-release.js')], {
       env: { ...process.env },
@@ -54,7 +45,15 @@ function run(command, args, options = {}) {
       return;
     }
 
-    await run(electronBuilderCmd, [], {
+    let electronBuilderCli;
+    try {
+      electronBuilderCli = require.resolve('electron-builder/out/cli/cli.js');
+    } catch (error) {
+      console.error('Unable to locate electron-builder CLI. Make sure dependencies are installed.');
+      throw error;
+    }
+
+    await run(nodeCmd, [electronBuilderCli], {
       env: { ...process.env },
     });
   } catch (error) {
