@@ -3,6 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; connect-src 'self' https://api.openai.com; img-src 'self' data: blob:; media-src 'self'; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self';"
+    />
     <title>Nostalgia Budget Builder</title>
     <meta name="theme-color" content="#008080" />
     <link rel="manifest" href="manifest.json" />
@@ -941,12 +945,7 @@
       <p class="screensaver-hint">Move your mouse or press any key to exit 3D Pipes.</p>
     </div>
 
-    <script
-      defer
-      src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.10.111/pdf.min.js"
-      crossorigin="anonymous"
-      referrerpolicy="no-referrer"
-    ></script>
+    <script src="vendor/pdfjs/pdf.min.js"></script>
     <script src="app.js" type="module"></script>
   </body>
 </html>

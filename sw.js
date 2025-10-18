@@ -1,11 +1,13 @@
-const CACHE_NAME = 'budget-builder-95-v5';
+const CACHE_NAME = 'budget-builder-95-v6';
 const ASSETS = [
   './',
   './index.html',
   './styles.css',
   './app.js',
   './manifest.json',
-  './icons/budget95-icon.svg'
+  './icons/budget95-icon.svg',
+  './vendor/pdfjs/pdf.min.js',
+  './vendor/pdfjs/pdf.worker.min.js'
 ];
 
 self.addEventListener('install', (event) => {

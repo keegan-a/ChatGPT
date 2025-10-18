@@ -2041,15 +2041,19 @@ function isPdfFile(file) {
 async function readPdfAsText(file) {
   if (!file) return '';
   if (!window.pdfjsLib) {
-    throw new Error('PDF support is unavailable. Check your internet connection and refresh.');
+    throw new Error('PDF support is unavailable. Re-run npm run prepare:web to download the PDF toolkit.');
   }
   try {
     const arrayBuffer = await file.arrayBuffer();
     if (window.pdfjsLib.GlobalWorkerOptions) {
-      window.pdfjsLib.GlobalWorkerOptions.workerSrc = window.pdfjsLib.GlobalWorkerOptions.workerSrc || '';
+      const existingWorkerSrc = window.pdfjsLib.GlobalWorkerOptions.workerSrc;
+      if (!existingWorkerSrc) {
+        const workerUrl = new URL('vendor/pdfjs/pdf.worker.min.js', window.location.href);
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl.toString();
+      }
     }
     if (typeof window.pdfjsLib.disableWorker !== 'undefined') {
-      window.pdfjsLib.disableWorker = true;
+      window.pdfjsLib.disableWorker = false;
     }
     const loadingTask = window.pdfjsLib.getDocument({ data: arrayBuffer, useWorkerFetch: false, isEvalSupported: false });
     const pdf = await loadingTask.promise;

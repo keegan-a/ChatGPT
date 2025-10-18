@@ -56,6 +56,19 @@ When the environment is active, you will see `(.venv)` at the beginning of your 
 
 ---
 
+## 3½. Download the offline assets (recommended)
+Spending Mapper imports rely on a local copy of the PDF toolkit so statements work even when you are offline. If you have [Node.js](https://nodejs.org/) installed, run the following command once inside the project folder:
+
+```bash
+npm run prepare:web
+```
+
+The script fetches the PDF analyzer, refreshes the `dist/` folder, and copies any icons you have supplied. You can re-run it anytime to pull the latest assets.
+
+> If you do not have Node.js yet, you can skip this step temporarily—PDF uploads will prompt you to run the command before analysis.
+
+---
+
 ## 4. Start a local web server
 While the files can be opened directly in a browser, using a tiny local server keeps everything behaving like a real website.
 
