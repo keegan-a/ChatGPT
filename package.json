@@ -9,7 +9,7 @@
     "prepare:web": "node scripts/prepare-web.js",
     "electron:dev": "npm run prepare:web && electron .",
     "electron:serve": "npm run electron:dev",
-    "electron:build": "npm run prepare:web && node scripts/clean-release.js && electron-builder",
+    "electron:build": "node scripts/run-electron-build.js",
     "package:desktop": "npm run electron:build",
     "cap:init": "npm run prepare:web && npx cap sync",
     "cap:add:android": "npm run prepare:web && npx cap add android",
@@ -33,8 +33,9 @@
     "appId": "com.budgetbuilder.desktop",
     "productName": "BudgetBuilder95",
     "directories": {
-      "output": "release"
+      "output": "release/${env.BUDGET95_BUILD_TAG}"
     },
+    "artifactName": "${productName} Setup ${version}-${arch}-${env.BUDGET95_BUILD_TAG}.${ext}",
     "files": [
       "dist/**/*",
       "electron/**/*"
@@ -42,9 +43,11 @@
     "extraResources": [
       "dist"
     ],
+    "publish": null,
     "win": {
       "target": "nsis",
-      "icon": "dist/icons/budget95.ico"
+      "icon": "dist/icons/budget95.ico",
+      "differentialPackage": false
     },
     "mac": {
       "target": "dmg",

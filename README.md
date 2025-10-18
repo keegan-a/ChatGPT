@@ -185,9 +185,19 @@ Use the bundled Electron configuration to generate `.exe`, `.dmg`, and `.AppImag
    ```bash
    npm run package:desktop
    ```
-   Electron Builder places the output in the `release/` folder and produces Windows `.exe` (NSIS installer), macOS `.dmg`, and Linux `.AppImage` artifacts. Double-click the file that matches your platform to install Budget Builder 95 permanently. The build script now wipes the previous `release/` directory before running Electron Builder so antivirus tools or previously opened installers cannot leave stale executables locked in place.
+   The helper script prints the build tag it generated (for example `2025-01-17T21-44-03-712Z`) and feeds it to Electron Builder so every run lands in its own `release/<build-tag>/` directory with uniquely named installers. Double-click the file that matches your platform to install Budget Builder 95 permanently.
 
 > **Icon tip:** `npm run prepare:web` copies whatever you place in `icons/` into `dist/icons/` and refuses to continue if the required files are missing. When you are hacking locally without icons you can temporarily run `BUDGET95_SKIP_ICON_CHECK=1 npm run prepare:web`, but packaging commands always enforce that the files exist.
+
+### Troubleshooting locked installer files on Windows
+
+If Electron Builder pauses with “output file is locked for writing,” work through these checks:
+
+1. **Unique build tags are automatic.** Each run now uses a timestamped `BUDGET95_BUILD_TAG`, which means new filenames such as `BudgetBuilder95 Setup 1.0.0-arm64-2025-01-17T21-44-03-712Z.exe`. Windows Defender usually releases unique names instantly; if you need a predictable tag set `BUDGET95_BUILD_TAG=your-label npm run package:desktop`.
+2. **The release directory is cleaned every time.** `scripts/clean-release.js` wipes the entire `release/` folder before Electron Builder runs so stale executables (or partially scanned artifacts) never linger. If the folder is held open in Explorer, close the window and rerun the command.
+3. **Blockmap generation is disabled.** Windows installers are created without delta update metadata (`differentialPackage: false`), reducing the chance that antivirus hooks the file mid-build.
+4. **Dry-run without Electron Builder when debugging.** Run `BUDGET95_SKIP_ELECTRON_BUILDER=1 npm run electron:build` to rebuild `dist/` and clean `release/` without touching the installer. Once the prep succeeds, rerun without the flag to generate the binaries.
+5. **Whitelist or relocate the release folder if needed.** Some corporate antivirus tools keep scanning new `.exe` files. Add `release/` to your exclusions or point the output somewhere else: `BUDGET95_BUILD_TAG=mytemp npm run package:desktop` writes to `release/mytemp/`, which you can move outside monitored directories.
 
 ## 11. Package Android and iOS builds with Capacitor
 
