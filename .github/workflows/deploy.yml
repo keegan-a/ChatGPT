@@ -1,0 +1,55 @@
+name: Deploy Web
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment to deploy'
+        type: choice
+        options:
+          - staging
+          - production
+        default: staging
+
+jobs:
+  deploy:
+    name: Deploy to Vercel
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Select deployment environment
+        run: |
+          if [[ "${{ github.event_name }}" == 'workflow_dispatch' ]]; then
+            echo "DEPLOY_ENVIRONMENT=${{ github.event.inputs.environment }}" >> "$GITHUB_ENV"
+          elif [[ "${GITHUB_REF_TYPE}" == 'tag' ]]; then
+            echo "DEPLOY_ENVIRONMENT=production" >> "$GITHUB_ENV"
+          else
+            echo "DEPLOY_ENVIRONMENT=staging" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build web application
+        run: npm run build:web
+
+      - name: Deploy
+        run: npm run deploy:web -- --environment="${DEPLOY_ENVIRONMENT}"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}

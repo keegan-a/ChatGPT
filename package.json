@@ -1,0 +1,13 @@
+{
+  "name": "chatgpt-web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:web": "npm run build --if-present",
+    "deploy:web": "node scripts/deploy-web.mjs"
+  },
+  "devDependencies": {
+    "@vercel/cli": "^33.2.0"
+  }
+}
