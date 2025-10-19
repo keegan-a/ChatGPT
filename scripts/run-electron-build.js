@@ -38,7 +38,7 @@ function run(command, args, options = {}) {
 (async () => {
   const buildTag = process.env.BUDGET95_BUILD_TAG || new Date().toISOString().replace(/[:.]/g, '-');
   process.env.BUDGET95_BUILD_TAG = buildTag;
-  console.log(`Using build tag: ${buildTag}`);
+  console.log(`Using build tag (for logs only): ${buildTag}`);
 
   try {
     await run(npmCmd, ['run', 'prepare:web'], {

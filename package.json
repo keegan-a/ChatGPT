@@ -33,9 +33,9 @@
     "appId": "com.budgetbuilder.desktop",
     "productName": "BudgetBuilder95",
     "directories": {
-      "output": "release/${env.BUDGET95_BUILD_TAG}"
+      "output": "release"
     },
-    "artifactName": "${productName} Setup ${version}-${arch}-${env.BUDGET95_BUILD_TAG}.${ext}",
+    "artifactName": "${productName} Setup ${version}-${arch}.${ext}",
     "files": [
       "dist/**/*",
       "electron/**/*"
