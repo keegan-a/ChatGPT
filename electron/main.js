@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, Menu, nativeImage, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -126,6 +126,17 @@ const menuTemplate = [
 ];
 
 app.whenReady().then(() => {
+  const contentSecurityPolicy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; connect-src 'self' https://api.openai.com; img-src 'self' data: blob:; media-src 'self'; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none';";
+
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    const responseHeaders = {
+      ...details.responseHeaders,
+      'Content-Security-Policy': [contentSecurityPolicy]
+    };
+
+    callback({ responseHeaders });
+  });
+
   Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate));
   createWindow();
 
