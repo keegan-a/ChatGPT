@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ChatGPT &mdash; Offline</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg-color: #0e1117;
+        --card-bg: rgba(255, 255, 255, 0.06);
+        --text-color: #f4f6fb;
+        --accent: #10a37f;
+        --muted: rgba(244, 246, 251, 0.75);
+      }
+      @media (prefers-color-scheme: light) {
+        :root {
+          --bg-color: #f7f9fc;
+          --card-bg: rgba(14, 17, 23, 0.08);
+          --text-color: #111320;
+          --accent: #0b8365;
+          --muted: rgba(17, 19, 32, 0.72);
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Inter", "Segoe UI", sans-serif;
+        background: radial-gradient(circle at 20% 20%, rgba(16, 163, 127, 0.2), transparent 55%),
+          radial-gradient(circle at 80% 0%, rgba(80, 55, 218, 0.25), transparent 60%), var(--bg-color);
+        color: var(--text-color);
+        display: grid;
+        place-items: center;
+        padding: 1.5rem;
+      }
+      main {
+        width: min(480px, 100%);
+        background: var(--card-bg);
+        border-radius: 20px;
+        padding: clamp(1.75rem, 3vw, 2.5rem);
+        backdrop-filter: blur(24px);
+        box-shadow: 0 24px 60px rgba(15, 17, 26, 0.35);
+      }
+      h1 {
+        margin: 0 0 1rem;
+        font-size: clamp(1.75rem, 4vw, 2.4rem);
+        letter-spacing: -0.02em;
+      }
+      p {
+        margin: 0 0 1.25rem;
+        line-height: 1.6;
+        color: var(--muted);
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        margin-top: 1.5rem;
+      }
+      .actions button,
+      .actions a {
+        appearance: none;
+        border-radius: 999px;
+        border: 0;
+        padding: 0.75rem 1.5rem;
+        font-size: 0.95rem;
+        cursor: pointer;
+        transition: transform 150ms ease, box-shadow 150ms ease;
+        text-decoration: none;
+      }
+      .actions .retry {
+        background: var(--accent);
+        color: white;
+        box-shadow: 0 12px 24px rgba(16, 163, 127, 0.35);
+      }
+      .actions .retry:hover,
+      .actions .retry:focus-visible {
+        transform: translateY(-1px);
+        box-shadow: 0 14px 28px rgba(16, 163, 127, 0.42);
+      }
+      .actions .cached {
+        background: transparent;
+        color: inherit;
+        border: 1px solid rgba(244, 246, 251, 0.35);
+      }
+      footer {
+        margin-top: 2.5rem;
+        font-size: 0.85rem;
+        color: var(--muted);
+        opacity: 0.9;
+      }
+      svg {
+        display: block;
+        width: clamp(64px, 18vw, 96px);
+        margin-bottom: 1.5rem;
+      }
+      @media (max-width: 480px) {
+        main {
+          padding: 1.5rem;
+        }
+        .actions {
+          flex-direction: column;
+        }
+        .actions .cached,
+        .actions .retry {
+          width: 100%;
+          text-align: center;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <svg viewBox="0 0 120 120" role="img" aria-labelledby="offline-title">
+        <title id="offline-title">Disconnected cloud illustration</title>
+        <defs>
+          <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#10a37f" stop-opacity="0.85" />
+            <stop offset="100%" stop-color="#5037da" stop-opacity="0.75" />
+          </linearGradient>
+        </defs>
+        <path
+          d="M39.5 45c2.2-14.7 14.7-26 30-26 13 0 24.2 8.3 28.4 20 13.2 1.7 23.1 12.9 23.1 26.4 0 14.7-11.9 26.6-26.6 26.6H40.7c-12 0-21.7-9.7-21.7-21.7 0-11 8.2-20.1 18.8-21.3z"
+          fill="url(#grad)"
+          opacity="0.8"
+        />
+        <path
+          d="M47 78c0-3.3 2.7-6 6-6h24c3.3 0 6 2.7 6 6s-2.7 6-6 6H53c-3.3 0-6-2.7-6-6z"
+          fill="#0e1117"
+          opacity="0.9"
+        />
+      </svg>
+      <h1>You&rsquo;re offline</h1>
+      <p>
+        We can&rsquo;t reach ChatGPT right now. Your recent chats and cached content are still available,
+        and we&rsquo;ll reconnect automatically once you&rsquo;re back online.
+      </p>
+      <div class="actions">
+        <button class="retry" type="button" onclick="window.location.reload()">Try again</button>
+        <a class="cached" href="/" rel="home">Go to cached home</a>
+      </div>
+      <footer>Tip: keep this tab open so your work stays safe.</footer>
+    </main>
+  </body>
+</html>
