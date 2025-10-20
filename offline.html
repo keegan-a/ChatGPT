@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Budget Builder 95 — Offline</title>
+    <link rel="stylesheet" href="offline.css" />
+  </head>
+  <body>
+    <main class="offline">
+      <div class="offline__panel">
+        <div class="offline__icon" aria-hidden="true">📡</div>
+        <h1>Waiting for dial-up…</h1>
+        <p>
+          Budget Builder 95 needs an internet connection to load the hosted desktop.
+          We’ll reconnect automatically once a signal returns.
+        </p>
+        <ol class="offline__steps">
+          <li>Check your Wi-Fi or cellular connection.</li>
+          <li>Try visiting <a href="https://app.budgetbuilder95.com/">app.budgetbuilder95.com</a> in a browser.</li>
+          <li>Reopen the app after you’re back online.</li>
+        </ol>
+        <button type="button" onclick="window.location.reload()">Retry now</button>
+      </div>
+    </main>
+  </body>
+</html>
