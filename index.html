@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; connect-src 'self' https://api.openai.com; img-src 'self' data: blob:; media-src 'self'; worker-src 'self' blob:; base-uri 'self'; form-action 'self';"
+      content="default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; connect-src 'self' https://api.openai.com; img-src 'self' data: blob:; media-src 'self'; worker-src 'self' blob:; base-uri 'self'; form-action 'self'; object-src 'none';"
     />
     <title>Nostalgia Budget Builder</title>
     <meta name="theme-color" content="#008080" />
@@ -28,6 +28,11 @@
     />
   </head>
   <body class="theme-win95">
+    <div class="offline-banner" id="offlineBanner" role="status" aria-live="polite" hidden>
+      <span class="offline-banner__icon" aria-hidden="true">📡</span>
+      <span class="offline-banner__text">You're offline. We'll reconnect as soon as a signal returns.</span>
+      <button type="button" class="offline-banner__retry" id="offlineRetryButton">Retry now</button>
+    </div>
     <div class="noise-overlay"></div>
     <main class="app-frame">
       <nav class="desktop-icons" aria-label="Desktop icons">
@@ -894,6 +899,9 @@
           </button>
           <button class="start-menu__item" data-open-window="assistant">
             🤖 Budget AI Co-Pilot
+          </button>
+          <button class="start-menu__item" data-action="share-budget">
+            📤 Share my budget snapshot
           </button>
           <div class="start-menu__item start-menu__item--inline">
             <label for="startModelSelect">AI model</label>

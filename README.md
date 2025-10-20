@@ -1,268 +1,222 @@
 # Budget Builder 95
 
-Welcome to **Budget Builder 95**, a nostalgic budgeting playground that shape-shifts between Windows 95, Windows XP Bliss, Windows Vista, and early 2000s Macintosh desktops. Follow the steps below to launch the app on your own computer using a Python virtual environment. The instructions assume **no prior experience**, so feel free to follow them line by line.
+Budget Builder 95 is a retro-flavoured budgeting studio that blends Windows 95, Windows XP Bliss, Windows Vista, and 2000s Macintosh themes into a single productivity playground. You can plan budgets, map real bank statements with AI assistance, log journal entries on a calendar, and even sneak in a round of classic Snake. This guide walks through everything from the very first command prompt all the way to shipping store-ready installers.
+
+> **New in this release** – the desktop and mobile shells now load the hosted web experience at **https://app.budgetbuilder95.com/**. You still get an offline screen, a robust PWA service worker, native sharing via Capacitor, and optional secure storage for your OpenAI key.
 
 ---
 
-## 1. Install Python (if needed)
-1. Open [python.org/downloads](https://www.python.org/downloads/).
-2. Download the latest stable release for your operating system (Windows, macOS, or Linux).
-3. Run the installer and, on Windows, make sure to check **"Add python.exe to PATH"** before clicking *Install Now*.
+## 1. Prerequisites (no experience required)
 
-You can verify the installation afterwards:
-```bash
-python --version
-```
-
----
-
-## 2. Open a command prompt or terminal
-- **Windows:** Press `Win + R`, type `cmd`, and press Enter.
-- **macOS:** Open **Terminal** from Applications → Utilities.
-- **Linux:** Launch your preferred terminal emulator.
-
-Use the `cd` command to move into the folder that contains the project files (replace the path with where you saved the repository):
-```bash
-cd path\to\ChatGPT
-```
-> On macOS/Linux use forward slashes instead: `cd /path/to/ChatGPT`
-
----
-
-## 3. Create and activate a virtual environment
-A virtual environment keeps this project’s tools separate from the rest of your machine.
-
-1. **Create** the environment (this makes a new `.venv` folder inside the project):
-   ```bash
-   python -m venv .venv
-   ```
-2. **Activate** the environment:
-   - **Windows (Command Prompt):**
+1. **Install Node.js 18 or newer**
+   - Go to [https://nodejs.org/en/download](https://nodejs.org/en/download) and grab the LTS installer for your platform.
+   - On Windows, leave “Automatically install the necessary tools” checked.
+   - After installation, open a new command prompt/terminal and confirm:
      ```bash
-     .venv\Scripts\activate
+     node --version
+     npm --version
      ```
-   - **Windows (PowerShell):**
-     ```powershell
-     .venv\Scripts\Activate.ps1
-     ```
-   - **macOS/Linux:**
-     ```bash
-     source .venv/bin/activate
-     ```
-
-When the environment is active, you will see `(.venv)` at the beginning of your command prompt.
-
-> This project uses only static files, so there are no extra packages to install. The virtual environment is still handy for keeping tools isolated.
+2. **Install Git (optional but recommended)**
+   - Download from [https://git-scm.com/downloads](https://git-scm.com/downloads).
+   - Verify with `git --version`.
+3. **Install Python 3 (optional)**
+   - Only required if you prefer using the legacy `desktop_launcher.py` helper.
+   - Download from [https://www.python.org/downloads/](https://www.python.org/downloads/) and tick “Add python.exe to PATH” during installation.
 
 ---
 
-## 3½. Download the offline assets (recommended)
-Spending Mapper imports rely on a local copy of the PDF toolkit so statements work even when you are offline. If you have [Node.js](https://nodejs.org/) installed, run the following command once inside the project folder:
+## 2. Grab the project
+
+These steps work exactly the same on Windows (Command Prompt), macOS (Terminal), or Linux shells.
 
 ```bash
-npm run prepare:web
+cd path\to\where\you\want\the\project
+# Clone the repository
+git clone https://github.com/your-account/budget-desktop-suite.git
+cd budget-desktop-suite
+
+# Install Node dependencies
+npm install
 ```
 
-The script fetches the PDF analyzer, refreshes the `dist/` folder, and copies any icons you have supplied. You can re-run it anytime to pull the latest assets.
-
-> If you do not have Node.js yet, you can skip this step temporarily—PDF uploads will prompt you to run the command before analysis.
+> If your shell cannot use `git`, download the project ZIP from GitHub, unzip it, then `cd` into the extracted folder before running `npm install`.
 
 ---
 
-## 4. Start a local web server
-While the files can be opened directly in a browser, using a tiny local server keeps everything behaving like a real website.
+## 3. Provide the icon artwork **before building installers**
 
-From inside the project folder **with the virtual environment activated**, run:
-```bash
-python -m http.server 8000
-```
-If port `8000` is busy, pick another number (for example `python -m http.server 8080`).
+The repository stays binary-free, so you must supply three files locally:
 
-You should see a message similar to:
-```
-Serving HTTP on :: port 8000 (http://[::]:8000/) ...
-```
-Keep this terminal window open while you use the app.
+| Required file | Where to place it | Purpose |
+| --- | --- | --- |
+| `budget95.ico` | `icons/budget95.ico` | Windows taskbar & installer icon |
+| `budget95.icns` | `icons/budget95.icns` | macOS dock/icon |
+| `budget95-512.png` | `icons/budget95-512.png` | High-resolution PWA & Linux icon |
 
-> **Fresh assets every time:** When you serve the project from `localhost`, any previously cached service workers are automatically cleared so you always load the latest layout.
+If you do not have custom artwork yet, keep the provided Base64 text files and decode them with your favourite tool, or follow the steps in `icons/README.md`.
+
+Run the build scripts **after** these files are in place so Electron Builder and the PWA manifest can pick them up automatically.
 
 ---
 
-## 5. View the app in your browser
-1. Open your web browser (Chrome, Edge, Firefox, Safari, etc.).
-2. Visit `http://localhost:8000` (or the alternate port you chose).
-3. Click `index.html` in the file listing to launch **Budget Builder 95**.
+## 4. Daily development flows
 
-You now have access to:
-- Weekly income controls and Windows 95-inspired panels.
-- Editable starter categories plus custom category creation.
-- Per-category cadence settings (daily, weekly, or monthly) with automatic conversions.
-- Future value forecasts across multiple timeframes.
-- Scope toggles for daily, weekly, monthly, and yearly views.
-- The Budget Insights window with live callouts, autosave controls, and quick resets.
-- Auto theme cycling and keyboard shortcuts (`Ctrl` + `←`/`→`, `Ctrl` + `Shift` + `F`) for rapid navigation.
-- A budget health gauge that shows how much of your income the plan is consuming.
-- The Spending Mapper window for manual or AI-assisted transaction imports.
-- Desktop icons that open Classic Snake or the AI co-pilot, mirroring a vintage OS desktop.
-- The Financial Journal window for daily/weekly/monthly accountability and notes that sync with the AI assistant.
-- Configurable OpenAI models plus encrypted API-key storage with unlock controls.
-
----
-
-## 6. Retro desktop tips
-- The **taskbar** keeps a button for every window. Click a button to bring its panel forward or to restore it if you minimized it.
-- Desktop icons in the upper-left corner launch Classic Snake or the AI Budget Co-Pilot without diving into the Start menu.
-- Tap the green **Start** button to open the Start menu. From there you can re-open closed windows, switch between the Windows 95, Windows XP Bliss, Windows Vista, or 2000s Macintosh aesthetics, jump into the Final Budget Showcase, launch the Classic Snake easter egg, or fire up the newly 3D-rendered Pipes screensaver.
-- Window controls now mimic the original desktop experience—hover to see their labels, minimize panels to the taskbar, or double-click title bars to maximize and restore.
-- The **Data tools** section of the Start menu lets you launch the Spending Mapper, cascade or tile every window, or toggle a focus mode that spotlights the active panel.
-- Try the **Classic Snake** Easter egg from the Start menu. Use the arrow keys to guide the snake once the Snake window is focused.
-- If you close a panel accidentally, re-open it from the Start menu’s **Windows** section.
-- On large screens you can drag window title bars or use the resize grips in the lower-right corner for a full retro desktop feel.
-- The **Budget Insights** panel surfaces top categories, savings rate, and suggestions. Use its reset button to jump back to the starter blueprint or toggle automatic theme cycling.
-
-### Keyboard shortcuts & automation
-
-- `Ctrl` + `←`/`→` cycles through the daily, weekly, monthly, and yearly scopes.
-- `Ctrl` + `Shift` + `F` opens the Final Budget Showcase on demand.
-- Toggle **Auto-cycle themes** in the Budget Insights window to rotate aesthetics every 45 seconds.
-- Budgets now autosave locally—returning to the app restores your last plan unless you reset it.
-
-### Spending Mapper & AI imports
-
-- Open the **Spending Mapper** from Start → Data tools to paste plain-text statements or upload one or more screenshots and/or bank-statement PDFs.
-- Manual lines work best in the format `Category - Amount - cadence`. Supported cadences include daily, weekly, monthly, biweekly (converted to weekly), and yearly (converted to monthly).
-- To try AI assistance, paste (or restore) an OpenAI API key, load your files, fine-tune the **Analysis focus** field if you want extra guidance, and click **Analyze with AI**. When you enable **Remember this key on this device**, add a passphrase so the key is encrypted locally; use **Unlock saved key** with the same passphrase or **Forget saved key** to remove it.
-- Pick the GPT model that suits your needs (for example GPT-4o for the richest analysis or GPT-4o mini for faster iterations) from the mapper panel or Start menu.
-- The default prompt now asks the model to read every transaction, call out subscriptions like Adobe Creative Cloud by name, and infer cadence from how often a merchant appears. Add your own instructions in the field to emphasize edge cases or budgeting priorities.
-- The analyzer can ingest multiple files at once. Images are sent directly to OpenAI, while PDFs are text-parsed locally via [pdf.js](https://mozilla.github.io/pdf.js/) before the excerpts are included in the request. A live internet connection is required for both the pdf.js loader and the OpenAI request; if either step fails you can still use manual entry.
-- Map detected entries to existing categories or create new ones, then apply them individually or all at once.
-
-### Financial journal & accountability
-
-- Open the **Financial Journal** window to log daily victories, impulse purchases, or reflections. Switch between daily, weekly, and monthly scopes and click any calendar day to focus it.
-- Journal entries autosave alongside your budget and appear in the right-hand list for quick editing or deletion.
-- The AI mapper and co-pilot automatically consider recent journal entries, helping the model distinguish recurring habits from one-off events when it suggests budget tweaks.
-
-### AI Budget Co-Pilot
-
-- Launch the **AI Budget Co-Pilot** from the desktop icon or Start → Data tools to ask for clarifications, cleanup ideas, or savings strategies.
-- The co-pilot reuses the OpenAI key you saved for the Spending Mapper and remembers the last several prompts so you can iterate quickly on follow-up questions.
-- Replies stay concise (under roughly 180 words) and often include checklists you can apply manually inside the Categories Planner.
-
----
-
-## 7. Capture your final budget showcase
-
-- Open the **Final Budget Showcase** window from the Budget Pulse panel or via the Start menu whenever you’re happy with your numbers.
-- The showcase auto-syncs with your latest inputs and renders a poster-style overview featuring theme-aware colors, scope insights, and category breakdowns.
-- Click **Save showcase as PDF** to open a print-ready window. From there you can save to PDF, share, or print the layout for a real-world reminder of your plan.
-
-## 8. Install Budget Builder 95 like an app
-
-Budget Builder 95 ships as a Progressive Web App (PWA), so you can pin it to your desktop or phone home screen without extra tooling.
-
-- **Desktop (Chrome / Edge):** With the app open, click the install icon in the address bar or open the browser menu → **Install Budget Builder 95**.
-- **iOS Safari:** Tap the share button → **Add to Home Screen**.
-- **Android Chrome:** Open the browser menu → **Install app**.
-
-After installation you’ll see a custom retro icon and can launch the budgeting desktop directly without re-opening the browser.
-
-## 9. Launch it like a desktop app (Python-free)
-
-If you’d rather double-click an app icon without running commands every time, use the included launcher script once to generate a shortcut:
-
-1. Make sure your virtual environment is active (see sections above).
-2. From the project folder run:
-   ```bash
-   python desktop_launcher.py
-   ```
-3. Your default browser will open to the hosted app. Pass `--no-browser` if you want to launch the server silently and open the URL manually. You can also create a desktop shortcut to this script once you are happy with the setup.
-
-## 10. Build native desktop installers with Electron
-
-Use the bundled Electron configuration to generate `.exe`, `.dmg`, and `.AppImage` builds that run without a browser:
-
-1. Install [Node.js](https://nodejs.org/) (version 18 or newer is recommended).
-2. **Provide your icon artwork** in the `icons/` folder. The repository stays binary-free by default, so you can either place your own `budget95.ico`, `budget95.icns`, and `budget95-512.png` files directly in that directory or replace the bundled `.base64` text sources. The build tooling copies binaries as-is (or decodes the base64 fallbacks) into `dist/icons/` and `build/icons/` whenever you run `npm run prepare:web` or any packaging command.
-3. Inside the project folder run:
-   ```bash
-   npm install
-   ```
-   This installs Electron, electron-builder, and the Capacitor toolchain.
-4. To preview the desktop shell (optional) launch the development build:
-   ```bash
-   npm run electron:dev
-   ```
-   The window falls back to the packaged assets automatically if you are not running `python -m http.server`.
-5. Create installable packages with:
-   ```bash
-   npm run package:desktop
-   ```
-   The helper script logs a timestamped build tag for troubleshooting and writes the installers to the `release/` folder (for example `BudgetBuilder95 Setup 1.0.0-arm64.exe`). Double-click the file that matches your platform to install Budget Builder 95 permanently.
-
-> **Icon tip:** `npm run prepare:web` copies whatever you place in `icons/` into `dist/icons/` and refuses to continue if the required files are missing. When you are hacking locally without icons you can temporarily run `BUDGET95_SKIP_ICON_CHECK=1 npm run prepare:web`, but packaging commands always enforce that the files exist.
-
-### Troubleshooting locked installer files on Windows
-
-If Electron Builder pauses with “output file is locked for writing,” work through these checks:
-
-1. **Installer names stay predictable.** Each build writes files like `BudgetBuilder95 Setup 1.0.0-arm64.exe` into `release/`. If you prefer timestamped names, rename the file after the build completes or archive it alongside the tag printed in the log output.
-2. **The release directory is cleaned every time.** `scripts/clean-release.js` wipes the entire `release/` folder before Electron Builder runs so stale executables (or partially scanned artifacts) never linger. If the folder is held open in Explorer, close the window and rerun the command.
-3. **Close antivirus scans on the output.** Some scanners grab the freshly written `.exe` before the signature is applied. Pause the scan briefly or add `release/` to your AV exclusions if builds keep stalling.
-4. **Dry-run without Electron Builder when debugging.** Run `BUDGET95_SKIP_ELECTRON_BUILDER=1 npm run electron:build` to rebuild `dist/` and clean `release/` without touching the installer. Once the prep succeeds, rerun without the flag to generate the binaries.
-5. **Move the installer after the build completes.** Copy the generated `.exe` from `release/` to another folder before running it if your antivirus keeps flagging the original location.
-
-## 11. Package Android and iOS builds with Capacitor
-
-Prefer native launchers on your phone? Capacitor wraps the same `dist/` bundle inside Android and iOS shells.
-
-### One-time platform setup
+### 4.1 Preview the hosted desktop in a browser
 
 ```bash
-npm install                    # already run for the desktop build step
-npm run cap:add:android        # creates android/ with Gradle & icon assets
-npm run cap:add:ios            # creates ios/ with an Xcode project (macOS only)
+npm run dev
 ```
 
-These commands install the official `@capacitor/android` and `@capacitor/ios` packages, generate the platform projects, and copy the prepared web assets automatically.
+This command:
+1. Copies the latest assets into `dist/` (`npm run prepare:web`).
+2. Starts a tiny static server at [http://localhost:8000](http://localhost:8000).
+3. Registers the service worker (outside of localhost) with offline caching and an `offline.html` fallback.
 
-### Generate updated bundles
+Stop the server with `Ctrl + C`.
 
-Whenever you change the web app, sync the native projects:
+Prefer Python? Run `python desktop_launcher.py` to open the hosted origin directly, or add `--serve-local` to spin up a local preview without leaving the terminal.
+
+### 4.2 Electron developer mode
 
 ```bash
-npm run cap:init               # rebuilds dist/ and copies it into android/ & ios/
+npm run electron:dev
 ```
 
-### Build installable packages
+- Loads the hosted origin when the app is packaged, but in dev it still points at `http://localhost:8000/` so you can iterate quickly.
+- Use `BUDGET95_DEV_SERVER=http://localhost:8000 npm run electron:dev` to point at a different dev server if needed.
 
-- **Android:**
-  ```bash
-  npm run package:android      # produces a debug APK/AAB using the local Android SDK
-  ```
-  Open the generated Android Studio project (`npm run cap:open:android`) if you prefer a graphical build pipeline or need to create signed releases for the Play Store.
+### 4.3 Mobile shells with Capacitor
 
-- **iOS (macOS required):**
-  ```bash
-  npm run package:ios          # triggers an Xcode build via Capacitor
-  ```
-  Launch the workspace in Xcode (`npm run cap:open:ios`) to archive the app, create signing certificates, or push the build to TestFlight.
+```bash
+npm run cap:init        # Sync web assets into native projects
+npm run cap:add:android # Run once to generate the Android project
+npm run cap:add:ios     # Run once to generate the iOS project
+```
 
-Both platforms reuse the same retro icons and app metadata defined in `capacitor.config.json`. Update that file if you want to change the displayed app name, bundle IDs, or splash colors.
+To open the native IDEs:
+```bash
+npm run cap:open:android
+npm run cap:open:ios
+```
 
-> **Quick alternative:** PWABuilder still works great if you prefer a web-only workflow. Point it at a hosted version of the app to download ready-made store bundles without maintaining native projects locally.
-
-## 12. Stop the server and exit the environment
-- To stop the server, return to the terminal running `python -m http.server` and press `Ctrl + C`.
-- To leave the virtual environment, type:
-  ```bash
-  deactivate
-  ```
+By default both platforms load the production origin `https://app.budgetbuilder95.com/`. To test against a local dev server set:
+```bash
+BUDGET95_CAP_USE_LOCAL=1 BUDGET95_DEV_SERVER=http://your-machine:8000 npm run cap:init
+```
 
 ---
 
-## 13. Customize or explore further
-- Open `index.html`, `styles.css`, or `app.js` in your favorite code editor to tweak the layout, styling, or logic.
-- Refresh the browser page after saving your changes to see the updates.
+## 5. Deploying the hosted web app
 
-Have fun exploring the retro budgeting experience!
+1. Build the static bundle:
+   ```bash
+   npm run build:web
+   ```
+2. Deploy to your S3 bucket + CloudFront distribution (requires the AWS CLI to be configured):
+   ```bash
+   BUDGET95_DEPLOY_BUCKET=app.budgetbuilder95.com \
+   BUDGET95_CLOUDFRONT_DISTRIBUTION_ID=YOUR_DISTRIBUTION_ID \
+   npm run deploy:web
+   ```
+
+The helper script simply calls `aws s3 sync` and optionally issues a CloudFront invalidation. Adapt it for Azure Static Web Apps, Netlify, Vercel, or any other provider if you prefer; the `dist/` folder is completely static.
+
+Further guidance lives in [DEPLOY.md](DEPLOY.md).
+
+---
+
+## 6. Packaging desktop installers
+
+### 6.1 Quick build for friends (NSIS EXE + Linux AppImage)
+
+```bash
+npm run package:desktop
+```
+
+Results appear under `release/`:
+- `BudgetBuilder95 Setup 1.0.0-x64.exe` (plus an ARM64 sibling) – simple double-click installer for Windows.
+- `BudgetBuilder95-1.0.0.AppImage` – portable Linux bundle.
+- `BudgetBuilder95-1.0.0.dmg` – macOS disk image signed by you (see below for notarisation).
+
+If Windows Defender or another scanner keeps files locked, re-run the build; `scripts/run-electron-build.js` cleans the previous `release/` folder automatically.
+
+> Building against a staging site? Prefix the command with `BUDGET95_HOSTED_ORIGIN=https://staging.budgetbuilder95.com/` so Electron and Capacitor shells point to the right origin.
+
+### 6.2 Store-ready bundles (MSIX + Mac App Store)
+
+```bash
+npm run package:desktop:store
+```
+
+What you get:
+- **Windows MSIX** in addition to NSIS, using the placeholder publisher information in `package.json`. Replace `publisher` and `identityName` with your actual certificate subject.
+- **macOS MAS** target in `release/mas-universal/` along with the DMG. The entitlements live in `electron/entitlements.mas*.plist` – customise them before submitting to Apple.
+
+### 6.3 Notarisation and signing
+
+- **Windows:** Use `signtool.exe` on the generated `.exe`/`.msix` packages. Document the certificate thumbprint in `DEPLOY.md` for teammates.
+- **macOS:** Export `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and `APPLE_TEAM_ID`, then run notarisation (`xcrun notarytool submit …`). Hardened runtime entitlements are already configured.
+
+More detailed, step-by-step instructions (including antivirus troubleshooting) live in [DEPLOY.md](DEPLOY.md).
+
+---
+
+## 7. Packaging mobile apps
+
+### 7.1 Android (APK/AAB)
+
+```bash
+npm run package:android
+```
+
+This wraps the hosted web app inside an Android WebView. Before uploading to the Play Store:
+1. Create a signing keystore and register it with Android Studio (see `DEPLOY.md`).
+2. Update `android/app/src/main/AndroidManifest.xml` if you add Capacitor plugins requiring extra permissions.
+
+### 7.2 iOS (IPA)
+
+```bash
+npm run package:ios
+```
+
+Open Xcode, supply your Apple developer team, and follow the prompts to archive/notarise. The `CapacitorConfig` already points to the hosted origin; offline caching is handled by the service worker inside the web bundle.
+
+### 7.3 Native capability checklist
+
+To satisfy Apple guideline 4.2, the app integrates:
+- **Native sharing** (`@capacitor/share`) – triggered from the Start menu (“📤 Share my budget snapshot”).
+- **Secure storage bridge** (`@capacitor/preferences`) – your encrypted OpenAI key is mirrored into device storage when available.
+
+You can extend this with biometrics, push notifications, or secure storage integrations; see the Capacitor docs linked in `DEPLOY.md`.
+
+---
+
+## 8. Offline experience & security
+
+- The service worker precaches the core shell plus `offline.html` and `offline.css`. Any navigation failure shows a friendly “Waiting for dial-up…” screen.
+- Electron enforces a strict Content Security Policy (no `unsafe-inline` or `unsafe-eval`) via session headers.
+- The web app mirrors that CSP through a `<meta>` tag and keeps external origins to `https://api.openai.com` plus Google Fonts.
+- API keys stored through “Remember my key” are encrypted in the browser and mirrored to native secure storage where available.
+- The offline banner in the web UI highlights connectivity status and offers a quick “Retry now” button.
+
+Full details live in [SECURITY.md](SECURITY.md).
+
+---
+
+## 9. AI budgeting assistant quick start
+
+1. Open the **Spending Mapper** window from the Start menu.
+2. Drop in PDFs or multiple screenshots of your statements. The app now sends a detailed prompt to OpenAI (choose between GPT‑4o and GPT‑4o mini, or add your own model in the selector).
+3. Optionally save your API key securely – you’ll be asked for a passphrase, and the session unlocks automatically while the window stays open.
+4. Imported line items appear with cadence controls so you can push them directly into the main budget table.
+5. Use the **Budget AI Co-Pilot** window for conversational follow-up questions; the history is trimmed after 10 exchanges to stay concise.
+
+---
+
+## 10. Additional documentation
+
+- [DEPLOY.md](DEPLOY.md) – deep dive into hosting, signing, and continuous delivery.
+- [SECURITY.md](SECURITY.md) – CSP breakdown, credential storage notes, and reporting instructions.
+- [icons/README.md](icons/README.md) – tips for preparing ICO/ICNS/PNG variants if you want to keep the repository binary-free.
+
+Have fun exploring – and don’t forget to hit the Start menu for the hidden Snake game and the retro 3D pipes screensaver! If you run into issues, open an issue on GitHub or email the team listed in `SECURITY.md`.

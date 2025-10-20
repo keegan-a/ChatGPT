@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 
 const isDev = !app.isPackaged;
+const PRODUCTION_ORIGIN = process.env.BUDGET95_HOSTED_ORIGIN || 'https://app.budgetbuilder95.com/';
 
 const BASE64_FALLBACK_MAP = {
   'budget95.ico': 'budget95.ico.base64',
@@ -80,6 +81,7 @@ function createWindow() {
 
   const appPath = app.getAppPath();
   const indexFile = path.join(appPath, 'dist', 'index.html');
+  const offlineFile = path.join(appPath, 'dist', 'offline.html');
   console.log('getAppPath:', appPath);
   console.log('index path:', indexFile);
   const devServer = process.env.BUDGET95_DEV_SERVER || 'http://localhost:8000/';
@@ -91,14 +93,27 @@ function createWindow() {
       console.error('Failed to load local assets in development mode:', error);
     });
   } else {
-    window.loadFile(indexFile).catch((error) => {
-      console.error('Failed to load packaged assets:', error);
+    window.loadURL(PRODUCTION_ORIGIN).catch((error) => {
+      console.error('Failed to reach hosted origin. Loading offline backup:', error);
+      return window.loadFile(offlineFile).catch((offlineError) => {
+        console.error('Unable to load offline screen:', offlineError);
+      });
     });
   }
 
   if (isDev) {
     window.webContents.openDevTools({ mode: 'detach' });
   }
+
+  window.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+    if (isDev) {
+      return;
+    }
+    console.warn('Renderer failed to load URL:', validatedURL, errorCode, errorDescription);
+    window.loadFile(offlineFile).catch((error) => {
+      console.error('Unable to load offline fallback after failure:', error);
+    });
+  });
 }
 
 const menuTemplate = [
@@ -126,7 +141,7 @@ const menuTemplate = [
 ];
 
 app.whenReady().then(() => {
-  const contentSecurityPolicy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; connect-src 'self' https://api.openai.com; img-src 'self' data: blob:; media-src 'self'; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none';";
+  const contentSecurityPolicy = "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; connect-src 'self' https://api.openai.com; img-src 'self' data: blob:; media-src 'self'; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none';";
 
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     const responseHeaders = {

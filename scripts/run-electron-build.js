@@ -5,6 +5,7 @@ const path = require('path');
 const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const nodeCmd = process.execPath;
 let electronBuilderCli;
+const forwardArgs = process.argv.slice(2);
 
 function resolveElectronBuilderCli() {
   if (electronBuilderCli) {
@@ -56,7 +57,7 @@ function run(command, args, options = {}) {
 
     const cliPath = resolveElectronBuilderCli();
 
-    await run(nodeCmd, [cliPath], {
+    await run(nodeCmd, [cliPath, ...forwardArgs], {
       env: { ...process.env },
     });
   } catch (error) {

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import http.server
+import os
 import socket
 import threading
 import time
@@ -12,6 +13,7 @@ import webbrowser
 from pathlib import Path
 
 APP_ROOT = Path(__file__).resolve().parent
+HOSTED_ORIGIN = os.environ.get("BUDGET95_HOSTED_ORIGIN", "https://app.budgetbuilder95.com/")
 
 
 class SilentHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
@@ -64,7 +66,19 @@ def main() -> None:
         action="store_true",
         help="Serve the app without automatically opening the default browser.",
     )
+    parser.add_argument(
+        "--serve-local",
+        action="store_true",
+        help="Serve dist/ locally instead of opening the hosted origin (useful for offline testing).",
+    )
     args = parser.parse_args()
+
+    if not args.serve_local:
+        print("Opening hosted Budget Builder 95 desktop…", flush=True)
+        print(f"Origin: {HOSTED_ORIGIN}\n", flush=True)
+        if not args.no_browser:
+            webbrowser.open(HOSTED_ORIGIN)
+        return
 
     port = find_free_port(args.port)
     address = f"http://127.0.0.1:{port}/index.html"

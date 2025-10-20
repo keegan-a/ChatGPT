@@ -19,6 +19,8 @@ const sources = [
   'app.js',
   'manifest.json',
   'sw.js',
+  'offline.html',
+  'offline.css',
   'README.md',
   'vendor'
 ];

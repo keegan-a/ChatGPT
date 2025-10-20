@@ -2308,3 +2308,44 @@ body.theme-mac .taskbar-button {
     gap: 4px;
   }
 }
+
+/* Offline banner */
+.offline-banner {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--panel-bg, rgba(0, 0, 0, 0.85));
+  color: var(--text-primary, #ffffff);
+  border: 2px solid var(--accent, #00a2ff);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 1rem;
+  z-index: 5000;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+}
+
+.offline-banner[hidden] {
+  display: none !important;
+}
+
+.offline-banner__icon {
+  font-size: 1.5rem;
+}
+
+.offline-banner__retry {
+  border: 2px solid currentColor;
+  background: transparent;
+  color: inherit;
+  font-weight: 600;
+  padding: 0.25rem 0.85rem;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.offline-banner__retry:hover,
+.offline-banner__retry:focus-visible {
+  background: rgba(255, 255, 255, 0.1);
+}

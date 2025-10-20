@@ -1,0 +1,53 @@
+name: Build and Deploy Budget Builder 95
+
+on:
+  push:
+    branches: ["main"]
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  build-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install
+      - name: Build web bundle
+        run: npm run build:web
+      - name: Deploy to S3/CloudFront
+        if: github.ref == 'refs/heads/main' && secrets.BUDGET95_DEPLOY_BUCKET != ''
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          BUDGET95_DEPLOY_BUCKET: ${{ secrets.BUDGET95_DEPLOY_BUCKET }}
+          BUDGET95_CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.BUDGET95_CLOUDFRONT_DISTRIBUTION_ID }}
+        run: npm run deploy:web
+
+  package-desktop:
+    if: github.event_name == 'release'
+    runs-on: windows-latest
+    needs: build-web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install
+      - name: Prepare web bundle
+        run: npm run build:web
+      - name: Package desktop shells
+        env:
+          BUDGET95_BUILD_TAG: ${{ github.run_id }}
+        run: npm run electron:build
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: budgetbuilder95-desktop
+          path: release/**

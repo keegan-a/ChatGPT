@@ -67,6 +67,8 @@ const calendarEntryNotesInput = document.querySelector('#calendarEntryNotes');
 const calendarStatus = document.querySelector('#calendarStatus');
 const calendarNewEntryBtn = document.querySelector('#calendarNewEntry');
 const calendarCancelEditBtn = document.querySelector('#calendarCancelEdit');
+const offlineBanner = document.querySelector('#offlineBanner');
+const offlineRetryButton = document.querySelector('#offlineRetryButton');
 const body = document.body;
 
 const scopeFactors = {
@@ -124,6 +126,33 @@ const themeSequence = ['win95', 'xp', 'vista', 'mac'];
 
 const CALENDAR_VIEWS = ['daily', 'weekly', 'monthly'];
 const JOURNAL_ENTRY_PREFIX = 'journal-entry';
+
+const capacitorRuntime = window.Capacitor || null;
+const isNativeRuntime = (() => {
+  if (!capacitorRuntime) {
+    return false;
+  }
+  if (typeof capacitorRuntime.isNativePlatform === 'function') {
+    try {
+      return capacitorRuntime.isNativePlatform();
+    } catch (error) {
+      console.warn('Unable to determine Capacitor platform:', error);
+      return false;
+    }
+  }
+  if (typeof capacitorRuntime.getPlatform === 'function') {
+    return capacitorRuntime.getPlatform() !== 'web';
+  }
+  if (typeof capacitorRuntime.platform === 'string') {
+    return capacitorRuntime.platform !== 'web';
+  }
+  return false;
+})();
+
+const sharePlugin = capacitorRuntime?.Plugins?.Share;
+const preferencesPlugin = capacitorRuntime?.Plugins?.Preferences;
+let nativeMapperRecordCache = null;
+let nativeMapperRecordLoaded = false;
 
 const DEFAULT_MAPPER_PROMPT = [
   'Review every transaction that appears in the provided screenshots or PDF excerpts.',
@@ -420,6 +449,17 @@ function scheduleStateSave() {
   }, 350);
 }
 
+function updateOfflineBanner(isOnline) {
+  if (!offlineBanner) {
+    return;
+  }
+  if (isOnline) {
+    offlineBanner.setAttribute('hidden', '');
+  } else {
+    offlineBanner.removeAttribute('hidden');
+  }
+}
+
 function arrayBufferToBase64(buffer) {
   return btoa(String.fromCharCode(...new Uint8Array(buffer)));
 }
@@ -433,7 +473,49 @@ function base64ToArrayBuffer(base64) {
   return bytes.buffer;
 }
 
+async function loadNativeMapperRecord() {
+  if (!preferencesPlugin || nativeMapperRecordLoaded) {
+    nativeMapperRecordLoaded = true;
+    return;
+  }
+
+  try {
+    const result = await preferencesPlugin.get({ key: MAPPER_KEY_STORAGE });
+    if (result?.value) {
+      try {
+        nativeMapperRecordCache = JSON.parse(result.value);
+      } catch (parseError) {
+        console.warn('Unable to parse native-stored API key metadata:', parseError);
+      }
+    }
+  } catch (error) {
+    console.warn('Unable to load API key from secure storage:', error);
+  } finally {
+    nativeMapperRecordLoaded = true;
+  }
+}
+
+async function syncNativeMapperRecord(record) {
+  if (!preferencesPlugin) {
+    return;
+  }
+  try {
+    if (record) {
+      await preferencesPlugin.set({ key: MAPPER_KEY_STORAGE, value: JSON.stringify(record) });
+      nativeMapperRecordCache = record;
+    } else {
+      await preferencesPlugin.remove({ key: MAPPER_KEY_STORAGE });
+      nativeMapperRecordCache = null;
+    }
+  } catch (error) {
+    console.warn('Unable to synchronize secure API key storage:', error);
+  }
+}
+
 function getStoredMapperRecord() {
+  if (nativeMapperRecordCache) {
+    return nativeMapperRecordCache;
+  }
   if (!('localStorage' in window)) {
     return null;
   }
@@ -443,10 +525,10 @@ function getStoredMapperRecord() {
       return null;
     }
     const record = JSON.parse(raw);
-    if (!record || typeof record !== 'object') {
-      return null;
+    if (record && typeof record === 'object') {
+      return record;
     }
-    return record;
+    return null;
   } catch (error) {
     console.warn('Unable to read stored API key metadata:', error);
     return null;
@@ -549,11 +631,13 @@ async function persistMapperKey(key, passphrase) {
       if (passphrase && window.sessionStorage) {
         window.sessionStorage.setItem(MAPPER_SESSION_PASSPHRASE, passphrase);
       }
+      await syncNativeMapperRecord(record);
     } else {
       window.localStorage.removeItem(MAPPER_KEY_STORAGE);
       if (window.sessionStorage) {
         window.sessionStorage.removeItem(MAPPER_SESSION_PASSPHRASE);
       }
+      await syncNativeMapperRecord(null);
     }
   } catch (error) {
     console.warn('Unable to store API key preference:', error);
@@ -569,6 +653,12 @@ function clearStoredMapperKey() {
     window.localStorage.removeItem(MAPPER_KEY_STORAGE);
     if (window.sessionStorage) {
       window.sessionStorage.removeItem(MAPPER_SESSION_PASSPHRASE);
+    }
+    nativeMapperRecordCache = null;
+    if (preferencesPlugin) {
+      preferencesPlugin
+        .remove({ key: MAPPER_KEY_STORAGE })
+        .catch((error) => console.warn('Unable to clear secure storage key:', error));
     }
   } catch (error) {
     console.warn('Unable to clear stored API key:', error);
@@ -2323,6 +2413,48 @@ async function fetchAssistantReply(apiKey) {
   return content.trim();
 }
 
+function buildBudgetShareText() {
+  if (!state.categories.length) {
+    return 'Budget Builder 95 snapshot: no categories configured yet.';
+  }
+
+  const totalExpensesWeekly = state.categories.reduce(
+    (sum, category) => sum + category.weeklyAmount,
+    0
+  );
+  const leftoverWeekly = state.weeklyIncome - totalExpensesWeekly;
+  const savingsRate = state.weeklyIncome === 0 ? 0 : leftoverWeekly / state.weeklyIncome;
+  const lines = [];
+  lines.push(`Budget Builder 95 snapshot — ${new Date().toLocaleDateString()}`);
+  lines.push(`Theme: ${getThemeDisplayName(state.theme)} | Scope: ${formatScopeLabel(state.scope)}`);
+  lines.push(`Weekly income: ${formatCurrency(state.weeklyIncome)}`);
+  lines.push(`Weekly expenses: ${formatCurrency(totalExpensesWeekly)}`);
+  lines.push(`Savings rate: ${(savingsRate * 100).toFixed(1)}%`);
+
+  const sorted = [...state.categories]
+    .sort((a, b) => b.weeklyAmount - a.weeklyAmount)
+    .slice(0, 8);
+
+  sorted.forEach((category) => {
+    const share = state.weeklyIncome > 0 ? category.weeklyAmount / state.weeklyIncome : 0;
+    lines.push(
+      `${category.name}: ${formatCurrency(category.weeklyAmount)} weekly (${(share * 100).toFixed(1)}%)`
+    );
+  });
+
+  if (state.journalEntries.length) {
+    const recent = [...state.journalEntries]
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 3)
+      .map((entry) => `${entry.date}: ${entry.title} (${formatCurrency(entry.amount)})`);
+    lines.push('Recent journal moments:');
+    recent.forEach((line) => lines.push(` • ${line}`));
+  }
+
+  lines.push('Generated with Budget Builder 95.');
+  return lines.join('\n');
+}
+
 function renderFinalShowcase() {
   if (!finalShowcase) return;
 
@@ -2446,6 +2578,31 @@ function renderFinalShowcase() {
       </footer>
     </article>
   `;
+}
+
+async function shareBudgetSnapshot() {
+  const snapshot = buildBudgetShareText();
+  const title = `Budget Builder 95 Snapshot (${new Date().toLocaleDateString()})`;
+
+  try {
+    if (sharePlugin && isNativeRuntime) {
+      await sharePlugin.share({ title, text: snapshot, dialogTitle: 'Share your budget' });
+      return;
+    }
+    if (navigator.share) {
+      await navigator.share({ title, text: snapshot });
+      return;
+    }
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(snapshot);
+      window.alert('Snapshot copied to your clipboard. Paste it anywhere to share.');
+      return;
+    }
+    window.prompt('Copy your budget snapshot and share it with friends:', snapshot);
+  } catch (error) {
+    console.error('Unable to share budget snapshot:', error);
+    window.alert('Something went wrong while sharing. Try copying the text manually.');
+  }
 }
 
 function exportFinalShowcase() {
@@ -4062,6 +4219,9 @@ if (startMenu) {
     } else if (action === 'toggle-focus') {
       setFocusMode(!focusModeEnabled);
       closeStartMenu();
+    } else if (action === 'share-budget') {
+      shareBudgetSnapshot();
+      closeStartMenu();
     }
   });
 }
@@ -4570,9 +4730,26 @@ customForm.addEventListener('submit', (event) => {
   }
 });
 
-init();
-initializeWindowSystem();
-window.addEventListener('resize', handleWindowResize);
+if (offlineRetryButton) {
+  offlineRetryButton.addEventListener('click', () => {
+    window.location.reload();
+  });
+}
+
+updateOfflineBanner(navigator.onLine !== false);
+window.addEventListener('online', () => updateOfflineBanner(true));
+window.addEventListener('offline', () => updateOfflineBanner(false));
+
+async function bootstrapApp() {
+  await loadNativeMapperRecord();
+  init();
+  initializeWindowSystem();
+  window.addEventListener('resize', handleWindowResize);
+}
+
+bootstrapApp().catch((error) => {
+  console.error('Failed to initialize Budget Builder 95:', error);
+});
 
 if ('serviceWorker' in navigator) {
   const isLocalEnvironment =

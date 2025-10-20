@@ -1,7 +1,7 @@
 {
   "name": "Budget Builder 95",
   "short_name": "Budget95",
-  "start_url": "./index.html",
+  "start_url": "/",
   "display": "standalone",
   "description": "Retro-inspired budgeting desktop with Windows 95, XP Bliss, Vista, and 2000s Macintosh themes.",
   "background_color": "#1a4ba8",

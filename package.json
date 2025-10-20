@@ -17,17 +17,28 @@
     "cap:open:android": "npm run cap:init && npx cap open android",
     "cap:open:ios": "npm run cap:init && npx cap open ios",
     "package:android": "npm run cap:init && npx cap build android",
-    "package:ios": "npm run cap:init && npx cap build ios"
+    "package:ios": "npm run cap:init && npx cap build ios",
+    "dev:web": "npm run prepare:web && node scripts/serve-dev.js",
+    "dev": "npm run prepare:web && node scripts/serve-dev.js",
+    "start": "npm run prepare:web && node scripts/serve-dev.js",
+    "build:web": "npm run prepare:web",
+    "deploy:web": "npm run build:web && node scripts/deploy-web.js",
+    "package:desktop:store": "npm run electron:build -- --mac dmg --mac mas --win nsis --win msix"
   },
   "devDependencies": {
     "@capacitor/cli": "^5.6.6",
     "@capacitor/ios": "^5.6.6",
     "electron": "^38.3.0",
-    "electron-builder": "^24.6.4"
+    "electron-builder": "^24.6.4",
+    "typescript": "^5.6.3",
+    "ts-node": "^10.9.2",
+    "@types/node": "^20.16.5"
   },
   "dependencies": {
     "@capacitor/android": "^5.6.6",
-    "@capacitor/core": "^5.6.6"
+    "@capacitor/core": "^5.6.6",
+    "@capacitor/preferences": "^5.6.6",
+    "@capacitor/share": "^5.6.6"
   },
   "build": {
     "appId": "com.budgetbuilder.desktop",
@@ -45,16 +56,58 @@
     ],
     "publish": [],
     "win": {
-      "target": "nsis",
-      "icon": "dist/icons/budget95.ico"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "msix",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "dist/icons/budget95.ico",
+      "publisher": "CN=YOUR COMPANY, O=Budget Builder Labs, C=US",
+      "identityName": "BudgetBuilderLabs.BudgetBuilder95"
     },
     "mac": {
-      "target": "dmg",
-      "icon": "dist/icons/budget95.icns"
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        },
+        {
+          "target": "mas",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "icon": "dist/icons/budget95.icns",
+      "category": "public.app-category.finance",
+      "hardenedRuntime": true,
+      "entitlements": "electron/entitlements.mac.plist",
+      "entitlementsInherit": "electron/entitlements.mac.inherit.plist",
+      "gatekeeperAssess": false
     },
     "linux": {
-      "target": "AppImage",
+      "target": [
+        "AppImage"
+      ],
       "icon": "dist/icons"
+    },
+    "mas": {
+      "entitlements": "electron/entitlements.mas.plist",
+      "entitlementsInherit": "electron/entitlements.mas.inherit.plist",
+      "category": "public.app-category.finance"
     }
   }
 }
