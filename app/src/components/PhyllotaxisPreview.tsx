@@ -13,7 +13,12 @@ import {
   generatePhyllotaxis,
 } from '../utils/phyllotaxis'
 import type { Hole } from '../utils/phyllotaxis'
-import { exportTemplateImage, printTemplate } from '../utils/printing'
+import {
+  exportTemplateImage,
+  printTemplate,
+  type PrintOptions,
+  type TemplateRenderOptions,
+} from '../utils/printing'
 
 const PREVIEW_DPI = 96
 
@@ -22,6 +27,8 @@ export interface PhyllotaxisPreviewProps {
   spacing: number
   holeCount: number
   angleDeg: number
+  renderOptions: TemplateRenderOptions
+  printOptions: PrintOptions
   onHoleSummary?: (summary: {
     actualHoles: number
     attempts: number
@@ -39,7 +46,7 @@ export interface PhyllotaxisPreviewHandle {
 }
 
 export const PhyllotaxisPreview = forwardRef<PhyllotaxisPreviewHandle, PhyllotaxisPreviewProps>(
-  ({ holeDiameter, spacing, holeCount, angleDeg, onHoleSummary }, ref) => {
+  ({ holeDiameter, spacing, holeCount, angleDeg, renderOptions, printOptions, onHoleSummary }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement | null>(null)
     const [holes, setHoles] = useState<Hole[]>([])
     const [drawingError, setDrawingError] = useState<string | null>(null)
@@ -88,18 +95,58 @@ export const PhyllotaxisPreview = forwardRef<PhyllotaxisPreviewHandle, Phyllotax
         ctx.fillStyle = '#f9fafb'
         ctx.fillRect(0, 0, canvasWidth, canvasHeight)
 
-        ctx.strokeStyle = '#111827'
-        ctx.lineWidth = 1
-
         holes.forEach((hole) => {
           const centerX = hole.x * PREVIEW_DPI
           const centerY = hole.y * PREVIEW_DPI
           const radius = hole.radius * PREVIEW_DPI
 
+          ctx.strokeStyle = '#111827'
+          ctx.lineWidth = 1
           ctx.beginPath()
           ctx.arc(centerX, centerY, radius, 0, Math.PI * 2)
           ctx.stroke()
+
+          const crosshairLength = Math.max(radius * 1.2, 6)
+          const halfLength = crosshairLength / 2
+          ctx.lineWidth = 1
+          ctx.beginPath()
+          ctx.moveTo(centerX - halfLength, centerY)
+          ctx.lineTo(centerX + halfLength, centerY)
+          ctx.moveTo(centerX, centerY - halfLength)
+          ctx.lineTo(centerX, centerY + halfLength)
+          ctx.stroke()
         })
+
+        const alignment = renderOptions.alignment
+        if (alignment) {
+          const markLength = Math.max(alignment.lengthIn * PREVIEW_DPI, 2)
+          const offset = Math.max(alignment.insetIn * PREVIEW_DPI, 0)
+          const interval = Math.max(alignment.intervalIn * PREVIEW_DPI, 2)
+          ctx.strokeStyle = '#3b82f6'
+          ctx.lineWidth = 1
+
+          const drawMark = (x: number, y: number, horizontal: boolean) => {
+            ctx.beginPath()
+            if (horizontal) {
+              ctx.moveTo(x - markLength / 2, y)
+              ctx.lineTo(x + markLength / 2, y)
+            } else {
+              ctx.moveTo(x, y - markLength / 2)
+              ctx.lineTo(x, y + markLength / 2)
+            }
+            ctx.stroke()
+          }
+
+          for (let x = offset; x <= canvasWidth - offset; x += interval) {
+            drawMark(x, offset, true)
+            drawMark(x, canvasHeight - offset, true)
+          }
+
+          for (let y = offset; y <= canvasHeight - offset; y += interval) {
+            drawMark(offset, y, false)
+            drawMark(canvasWidth - offset, y, false)
+          }
+        }
 
         // outline of the board
         ctx.strokeStyle = '#3b82f6'
@@ -109,14 +156,14 @@ export const PhyllotaxisPreview = forwardRef<PhyllotaxisPreviewHandle, Phyllotax
         console.error(error)
         setDrawingError('Unable to render preview')
       }
-    }, [canvasWidth, canvasHeight, holes])
+    }, [canvasWidth, canvasHeight, holes, renderOptions])
 
     useImperativeHandle(
       ref,
       () => ({
         exportAsImage: async () => {
           if (!holes.length) throw new Error('No holes to export')
-          const dataUrl = await exportTemplateImage(holes)
+          const dataUrl = await exportTemplateImage(holes, renderOptions)
           const link = document.createElement('a')
           link.href = dataUrl
           link.download = `phyllotaxis-template-${Date.now()}.png`
@@ -124,10 +171,10 @@ export const PhyllotaxisPreview = forwardRef<PhyllotaxisPreviewHandle, Phyllotax
         },
         printTemplate: async () => {
           if (!holes.length) throw new Error('No holes to print')
-          await printTemplate(holes)
+          await printTemplate(holes, printOptions)
         },
       }),
-      [holes],
+      [holes, printOptions, renderOptions],
     )
 
     return (

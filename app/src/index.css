@@ -72,6 +72,18 @@ select {
   gap: 0.5rem;
 }
 
+.control--checkbox label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 500;
+}
+
+.control--checkbox input[type='checkbox'] {
+  width: auto;
+  height: auto;
+}
+
 .control__input {
   display: flex;
   align-items: center;
@@ -108,6 +120,12 @@ select {
   margin: 0;
   font-size: 0.85rem;
   color: #6b7280;
+}
+
+.panel h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: #1f2937;
 }
 
 .actions {

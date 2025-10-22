@@ -1,6 +1,11 @@
 import { useCallback, useMemo, useState } from 'react'
 import { PhyllotaxisPreview } from './components/PhyllotaxisPreview'
 import type { PhyllotaxisPreviewHandle } from './components/PhyllotaxisPreview'
+import type {
+  AlignmentMarkSettings,
+  PrintOptions,
+  TemplateRenderOptions,
+} from './utils/printing'
 import { BOARD_HEIGHT_IN, BOARD_WIDTH_IN } from './utils/phyllotaxis'
 import './index.css'
 
@@ -31,6 +36,12 @@ function App() {
   const [holeCount, setHoleCount] = useState(1500)
   const [angleOption, setAngleOption] = useState<AngleOptionId>('golden')
   const [customAngle, setCustomAngle] = useState(137.5)
+  const [printMargin, setPrintMargin] = useState(0.25)
+  const [overlayEnabled, setOverlayEnabled] = useState(false)
+  const [overlayOverlap, setOverlayOverlap] = useState(0.5)
+  const [alignmentInterval, setAlignmentInterval] = useState(4)
+  const [alignmentLength, setAlignmentLength] = useState(0.3)
+  const [alignmentInset, setAlignmentInset] = useState(0.1)
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [summary, setSummary] = useState({
@@ -50,6 +61,30 @@ function App() {
     const option = ANGLE_OPTIONS.find((item) => item.id === angleOption)
     return option?.value ?? 137.50776405003785
   }, [angleOption, customAngle])
+
+  const alignmentSettings = useMemo<AlignmentMarkSettings>(
+    () => ({
+      intervalIn: Math.max(alignmentInterval, 0.5),
+      lengthIn: Math.max(alignmentLength, 0.05),
+      insetIn: Math.max(alignmentInset, 0),
+    }),
+    [alignmentInterval, alignmentLength, alignmentInset],
+  )
+
+  const renderOptions = useMemo<TemplateRenderOptions>(
+    () => ({ alignment: alignmentSettings }),
+    [alignmentSettings],
+  )
+
+  const printOptions = useMemo<PrintOptions>(
+    () => ({
+      mode: overlayEnabled ? 'overlay' : 'standard',
+      marginIn: Math.max(printMargin, 0),
+      overlapIn: overlayEnabled ? Math.max(overlayOverlap, 0) : 0,
+      alignment: alignmentSettings,
+    }),
+    [alignmentSettings, overlayEnabled, overlayOverlap, printMargin],
+  )
 
   const [previewHandle, setPreviewHandle] = useState<PhyllotaxisPreviewHandle | null>(null)
 
@@ -168,6 +203,111 @@ function App() {
             )}
           </div>
 
+          <h3>Print &amp; Export</h3>
+          <div className="control">
+            <label htmlFor="printMargin">Printable margin per side</label>
+            <div className="control__input">
+              <input
+                id="printMargin"
+                type="number"
+                min="0"
+                step="0.01"
+                value={printMargin}
+                onChange={(event) => setPrintMargin(Math.max(Number(event.target.value), 0))}
+              />
+              <span className="unit">in</span>
+            </div>
+            <p className="control__help">
+              Reserving a margin helps avoid printer clipping while keeping scale accurate.
+            </p>
+          </div>
+
+          <div className="control control--checkbox">
+            <label htmlFor="overlayEnabled">
+              <input
+                id="overlayEnabled"
+                type="checkbox"
+                checked={overlayEnabled}
+                onChange={(event) => setOverlayEnabled(event.target.checked)}
+              />
+              <span>Enable overlay tiling</span>
+            </label>
+            <p className="control__help">
+              Adds overlap between sheets so they can be layered without gaps. Disable to use edge
+              to edge tiling.
+            </p>
+          </div>
+
+          {overlayEnabled && (
+            <div className="control">
+              <label htmlFor="overlayOverlap">Overlay amount</label>
+              <div className="control__input">
+                <input
+                  id="overlayOverlap"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={overlayOverlap}
+                  onChange={(event) => setOverlayOverlap(Math.max(Number(event.target.value), 0))}
+                />
+                <span className="unit">in</span>
+              </div>
+              <p className="control__help">
+                Determines how far each sheet should overlap its neighbors on every side.
+              </p>
+            </div>
+          )}
+
+          <h3>Alignment marks</h3>
+          <div className="control">
+            <label htmlFor="alignmentInterval">Mark spacing</label>
+            <div className="control__input">
+              <input
+                id="alignmentInterval"
+                type="number"
+                min="0.5"
+                step="0.1"
+                value={alignmentInterval}
+                onChange={(event) => setAlignmentInterval(Math.max(Number(event.target.value), 0.5))}
+              />
+              <span className="unit">in</span>
+            </div>
+            <p className="control__help">Distance between tick marks around the board perimeter.</p>
+          </div>
+
+          <div className="control">
+            <label htmlFor="alignmentLength">Mark length</label>
+            <div className="control__input">
+              <input
+                id="alignmentLength"
+                type="number"
+                min="0.05"
+                step="0.01"
+                value={alignmentLength}
+                onChange={(event) => setAlignmentLength(Math.max(Number(event.target.value), 0.05))}
+              />
+              <span className="unit">in</span>
+            </div>
+          </div>
+
+          <div className="control">
+            <label htmlFor="alignmentInset">Mark inset</label>
+            <div className="control__input">
+              <input
+                id="alignmentInset"
+                type="number"
+                min="0"
+                step="0.01"
+                value={alignmentInset}
+                onChange={(event) => setAlignmentInset(Math.max(Number(event.target.value), 0))}
+              />
+              <span className="unit">in</span>
+            </div>
+            <p className="control__help">
+              Controls how far each mark sits inside the board outline.
+            </p>
+          </div>
+
           <div className="actions">
             <button type="button" onClick={handleExport}>
               Export PNG
@@ -211,6 +351,8 @@ function App() {
             spacing={spacing}
             holeCount={holeCount}
             angleDeg={angleDeg}
+            renderOptions={renderOptions}
+            printOptions={printOptions}
             onHoleSummary={(details) => setSummary(details)}
             ref={setPreviewHandle}
           />

@@ -1,6 +1,7 @@
 # Phyllotaxis Drill Template
 
 The React + TypeScript single-page app inside this directory renders phyllotaxis drilling templates sized for a 48" × 24" board.
+Each hole preview includes a crosshair for accurate center punching, and printer/export tools support margin, overlap, and alignment mark customization.
 
 ## Available Scripts
 
