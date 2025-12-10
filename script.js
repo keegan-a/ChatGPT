@@ -6,6 +6,8 @@ const controls = {
   dimension: document.getElementById("dimension"),
   vertexCount: document.getElementById("vertexCount"),
   color: document.getElementById("color"),
+  displayScale: document.getElementById("displayScale"),
+  colorPulse: document.getElementById("colorPulse"),
   feedback: document.getElementById("feedback"),
   distortion: document.getElementById("distortion"),
   audioReact: document.getElementById("audioReact"),
@@ -13,6 +15,8 @@ const controls = {
   thickness: document.getElementById("thickness"),
   spread: document.getElementById("spread"),
   feedbackDistortion: document.getElementById("feedbackDistortion"),
+  mirrorIntensity: document.getElementById("mirrorIntensity"),
+  bloom: document.getElementById("bloom"),
   playPause: document.getElementById("playPause"),
   reset: document.getElementById("reset"),
   audioInput: document.getElementById("audioInput"),
@@ -45,6 +49,82 @@ const state = {
   rotation: 0,
   jitterSeed: Math.random() * 1000,
 };
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function hexToHSL(hex) {
+  const sanitized = hex.replace("#", "");
+  const num = parseInt(sanitized, 16);
+  const r = (num >> 16) & 255;
+  const g = (num >> 8) & 255;
+  const b = num & 255;
+  const rP = r / 255;
+  const gP = g / 255;
+  const bP = b / 255;
+  const max = Math.max(rP, gP, bP);
+  const min = Math.min(rP, gP, bP);
+  let h;
+  let s;
+  const l = (max + min) / 2;
+
+  if (max === min) {
+    h = s = 0;
+  } else {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case rP:
+        h = (gP - bP) / d + (gP < bP ? 6 : 0);
+        break;
+      case gP:
+        h = (bP - rP) / d + 2;
+        break;
+      default:
+        h = (rP - gP) / d + 4;
+        break;
+    }
+    h /= 6;
+  }
+  return { h: h * 360, s: s * 100, l: l * 100 };
+}
+
+function hslToHex({ h, s, l }) {
+  const c = (1 - Math.abs(2 * l / 100 - 1)) * (s / 100);
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = l / 100 - c / 2;
+  let r = 0;
+  let g = 0;
+  let b = 0;
+
+  if (h >= 0 && h < 60) {
+    r = c;
+    g = x;
+  } else if (h < 120) {
+    r = x;
+    g = c;
+  } else if (h < 180) {
+    g = c;
+    b = x;
+  } else if (h < 240) {
+    g = x;
+    b = c;
+  } else if (h < 300) {
+    r = x;
+    b = c;
+  } else {
+    r = c;
+    b = x;
+  }
+
+  const toHex = (v) => {
+    const hex = Math.round((v + m) * 255).toString(16).padStart(2, "0");
+    return hex;
+  };
+
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
 
 function setupAnalyser() {
   if (!audioContext) {
@@ -132,12 +212,13 @@ function jitterNoise(index, scale) {
   ) * scale;
 }
 
-function getVertices(dimension, count, audioLevel) {
-  const vertices = [];
-  const distortion = Number(controls.distortion.value);
-  const spread = Number(controls.spread.value);
-  const baseRadius = canvas.height * 0.22;
-  const radius = lerp(baseRadius, baseRadius * (1.5 + spread), audioLevel * Number(controls.audioReact.value));
+  function getVertices(dimension, count, audioLevel) {
+    const vertices = [];
+    const distortion = Number(controls.distortion.value);
+    const spread = Number(controls.spread.value);
+    const scale = Number(controls.displayScale.value);
+    const baseRadius = canvas.height * 0.22 * scale;
+    const radius = lerp(baseRadius, baseRadius * (1.5 + spread), audioLevel * Number(controls.audioReact.value));
 
   if (dimension === 1) {
     for (let i = 0; i < count; i++) {
@@ -237,61 +318,101 @@ function drawGrid() {
   ctx.restore();
 }
 
-function render() {
-  const feedback = Number(controls.feedback.value);
-  ctx.fillStyle = `rgba(3, 12, 7, ${feedback})`;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  function render() {
+    const audioLevel = getAudioLevel();
+    const feedback = Number(controls.feedback.value);
+    ctx.fillStyle = `rgba(3, 12, 7, ${feedback})`;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  drawGrid();
-
-  const audioLevel = getAudioLevel();
-  const dimension = Number(controls.dimension.value);
-  const vertexCount = Number(controls.vertexCount.value);
-  state.vertices = getVertices(dimension, vertexCount, audioLevel);
-
-  const color = controls.color.value;
-  ctx.strokeStyle = color;
-  ctx.lineWidth = Number(controls.thickness.value);
-  ctx.shadowBlur = 12 + audioLevel * 20;
-  ctx.shadowColor = color;
-
-  const offsetStrength = Number(controls.feedbackDistortion.value);
-  const distortion = Number(controls.distortion.value);
-
-  const projected = state.vertices.map((v, i) => {
-    const wobble = jitterNoise(i, distortion * 4 + audioLevel * 8);
-    const projectedPoint = project({
-      x: v.x + wobble,
-      y: v.y + wobble,
-      z: v.z + wobble,
-    });
-    projectedPoint.x += Math.sin(phase * 0.1 + i) * offsetStrength;
-    projectedPoint.y += Math.cos(phase * 0.1 + i) * offsetStrength;
-    return projectedPoint;
-  });
-
-  ctx.beginPath();
-  for (let i = 0; i < projected.length; i++) {
-    for (let j = i + 1; j < projected.length; j++) {
-      const a = projected[i];
-      const b = projected[j];
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(b.x, b.y);
+    const mirrorIntensity = Number(controls.mirrorIntensity.value);
+    if (mirrorIntensity > 0.001) {
+      const cssWidth = canvas.width / devicePixelRatio;
+      const cssHeight = canvas.height / devicePixelRatio;
+      const mirrorScale = clamp(1 - mirrorIntensity * 0.14 - audioLevel * 0.05, 0.7, 0.98);
+      const dx = (cssWidth - cssWidth * mirrorScale) / 2;
+      const dy = (cssHeight - cssHeight * mirrorScale) / 2;
+      ctx.save();
+      ctx.globalAlpha = mirrorIntensity * 0.9;
+      ctx.globalCompositeOperation = "screen";
+      ctx.drawImage(canvas, dx, dy, cssWidth * mirrorScale, cssHeight * mirrorScale);
+      ctx.restore();
     }
-  }
-  ctx.stroke();
 
-  ctx.fillStyle = color;
-  projected.forEach((p) => {
+    drawGrid();
+
+    const dimension = Number(controls.dimension.value);
+    const vertexCount = Number(controls.vertexCount.value);
+    state.vertices = getVertices(dimension, vertexCount, audioLevel);
+
+    const baseHSL = hexToHSL(controls.color.value);
+    const pulse = Number(controls.colorPulse.value);
+    const laserHue = (baseHSL.h + phase * 0.3 + audioLevel * 360 * pulse) % 360;
+    const laserColor = hslToHex({
+      h: laserHue,
+      s: clamp(baseHSL.s + audioLevel * pulse * 30, 0, 100),
+      l: clamp(baseHSL.l + audioLevel * pulse * 12 - pulse * 6, 0, 100),
+    });
+
+    const bloom = Number(controls.bloom.value);
+    ctx.strokeStyle = laserColor;
+    ctx.lineWidth = Number(controls.thickness.value) * (1 + audioLevel * 0.4);
+    ctx.shadowBlur = bloom + audioLevel * (10 + pulse * 20);
+    ctx.shadowColor = laserColor;
+
+    const offsetStrength = Number(controls.feedbackDistortion.value);
+    const distortion = Number(controls.distortion.value);
+
+    const projected = state.vertices.map((v, i) => {
+      const wobble = jitterNoise(i, distortion * 4 + audioLevel * 8);
+      const projectedPoint = project({
+        x: v.x + wobble,
+        y: v.y + wobble,
+        z: v.z + wobble,
+      });
+      projectedPoint.x += Math.sin(phase * 0.1 + i) * offsetStrength;
+      projectedPoint.y += Math.cos(phase * 0.1 + i) * offsetStrength;
+      return projectedPoint;
+    });
+
     ctx.beginPath();
-    ctx.arc(p.x, p.y, 2.5 + audioLevel * 2, 0, Math.PI * 2);
-    ctx.fill();
-  });
+    for (let i = 0; i < projected.length; i++) {
+      for (let j = i + 1; j < projected.length; j++) {
+        const a = projected[i];
+        const b = projected[j];
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+      }
+    }
+    ctx.stroke();
 
-  state.rotation += Number(controls.rotation.value);
-  phase += 1;
-  requestAnimationFrame(render);
-}
+    if (projected.length > 2) {
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = 0.4 + audioLevel * 0.35;
+      ctx.strokeStyle = `hsla(${(laserHue + 120) % 360}, 90%, 70%, 0.7)`;
+      ctx.lineWidth = Math.max(1, Number(controls.thickness.value) * 0.6);
+      ctx.beginPath();
+      ctx.moveTo(projected[0].x, projected[0].y);
+      for (let i = 1; i < projected.length; i++) {
+        ctx.lineTo(projected[i].x, projected[i].y);
+      }
+      ctx.closePath();
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    ctx.fillStyle = laserColor;
+    projected.forEach((p, i) => {
+      ctx.beginPath();
+      const pulseRadius = 2.5 + audioLevel * 2 + Math.sin(phase * 0.05 + i) * 0.6 * pulse;
+      ctx.arc(p.x, p.y, pulseRadius, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    state.rotation += Number(controls.rotation.value);
+    phase += 1;
+    requestAnimationFrame(render);
+  }
 
 function resize() {
   const rect = canvas.getBoundingClientRect();

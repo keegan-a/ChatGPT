@@ -10,11 +10,15 @@ Open `index.html` in any modern browser. No build step is required.
 - **Dimension (1-5D)**: Choose how many dimensional layers to stack. 4D and 5D duplicate the 3D form at 50% and 25% scale for nested projections.
 - **Vertices**: Number of points used to form the laser mesh. Every vertex connects to every other.
 - **Color**: Pick the laser hue.
+- **Display scale**: Shrink or enlarge the projected form to keep it comfortably on screen.
+- **Color pulse**: Adds audio-reactive hue shifts for shimmering lasers.
 - **Background glow**: Higher values increase afterglow for trailing feedback.
 - **Distortion / Feedback distortion**: Adds jitter and drift to the geometry.
 - **Audio reactiveness / Amplitude spread**: Blend in audio energy to expand the shapes.
 - **Rotation speed**: Adjust the rotation of the projected forms.
 - **Laser thickness**: Control line width and point size.
+- **Feedback frames**: Generates mirror-like echo frames for infinite tunnel effects.
+- **Laser bloom**: Increase glow intensity for brighter beams.
 - **Reset wave**: Re-randomizes jitter for a fresh pattern.
 
 ## Notes

@@ -23,6 +23,7 @@ body {
   letter-spacing: 0.02em;
   display: flex;
   justify-content: center;
+  align-items: flex-start;
 }
 
 .layout {
@@ -30,7 +31,7 @@ body {
   grid-template-columns: 360px minmax(0, 1fr);
   gap: 1.5rem;
   padding: clamp(1rem, 3vw, 2rem);
-  max-width: min(1100px, 96vw);
+  max-width: min(1040px, 96vw);
   width: 100%;
 }
 
@@ -138,7 +139,7 @@ button:disabled {
   box-shadow: 0 0 50px rgba(0, 255, 128, 0.05), inset 0 0 60px rgba(0, 255, 128, 0.08);
   display: flex;
   justify-content: center;
-  padding: clamp(0.75rem, 2vw, 1.25rem);
+  padding: clamp(0.65rem, 1.6vw, 1.1rem);
 }
 
 .visualizer audio {
@@ -148,7 +149,7 @@ button:disabled {
 .frame {
   position: relative;
   aspect-ratio: 16 / 9;
-  width: min(900px, 100%);
+  width: min(760px, 100%);
   margin: 0 auto;
 }
 
