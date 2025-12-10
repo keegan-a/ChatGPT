@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Oscilloscope Laser Dimension Visualizer</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="layout">
+    <section class="control-panel">
+      <header>
+        <h1>Laser Vertex Lab</h1>
+        <p class="tagline">Multi-dimensional oscilloscope-inspired visualizer</p>
+      </header>
+      <div class="controls">
+        <label>Audio file
+          <input type="file" id="audioInput" accept="audio/*" />
+        </label>
+        <div class="two-col">
+          <label>Dimension
+            <input type="range" id="dimension" min="1" max="5" value="3" />
+            <span class="value" data-for="dimension">3D</span>
+          </label>
+          <label>Vertices
+            <input type="range" id="vertexCount" min="3" max="160" value="60" />
+            <span class="value" data-for="vertexCount">60</span>
+          </label>
+        </div>
+        <div class="two-col">
+          <label>Color
+            <input type="color" id="color" value="#8bf7b2" />
+          </label>
+          <label>Background glow
+            <input type="range" id="feedback" min="0" max="0.3" step="0.01" value="0.08" />
+            <span class="value" data-for="feedback">0.08</span>
+          </label>
+        </div>
+        <div class="two-col">
+          <label>Distortion
+            <input type="range" id="distortion" min="0" max="1" step="0.01" value="0.2" />
+            <span class="value" data-for="distortion">0.20</span>
+          </label>
+          <label>Audio reactiveness
+            <input type="range" id="audioReact" min="0" max="2" step="0.05" value="1" />
+            <span class="value" data-for="audioReact">1.00</span>
+          </label>
+        </div>
+        <div class="two-col">
+          <label>Rotation speed
+            <input type="range" id="rotation" min="0" max="0.03" step="0.001" value="0.012" />
+            <span class="value" data-for="rotation">0.012</span>
+          </label>
+          <label>Laser thickness
+            <input type="range" id="thickness" min="0.3" max="4" step="0.1" value="1.6" />
+            <span class="value" data-for="thickness">1.6</span>
+          </label>
+        </div>
+        <div class="two-col">
+          <label>Amplitude spread
+            <input type="range" id="spread" min="0" max="1" step="0.02" value="0.5" />
+            <span class="value" data-for="spread">0.50</span>
+          </label>
+          <label>Feedback distortion
+            <input type="range" id="feedbackDistortion" min="0" max="1.4" step="0.02" value="0.4" />
+            <span class="value" data-for="feedbackDistortion">0.40</span>
+          </label>
+        </div>
+        <div class="buttons">
+          <button id="playPause" disabled>Play</button>
+          <button id="reset" type="button">Reset wave</button>
+        </div>
+        <p class="hint">Upload an audio file, then sculpt the laser field by adjusting the controls. Dimensions 4 & 5 duplicate and shrink the 3D form.</p>
+      </div>
+    </section>
+
+    <section class="visualizer">
+      <div class="frame">
+        <canvas id="display" width="1280" height="720"></canvas>
+        <div class="glass"></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
