@@ -72,7 +72,12 @@ function clamp(value, min, max) {
 }
 
 function hexToHSL(hex) {
-  const sanitized = hex.replace("#", "");
+  const sanitized = hex?.replace("#", "");
+  // Fallback to a bright green if parsing fails
+  if (!sanitized || !/^[0-9a-fA-F]{6}$/.test(sanitized)) {
+    return { h: 140, s: 90, l: 70 };
+  }
+
   const num = parseInt(sanitized, 16);
   const r = (num >> 16) & 255;
   const g = (num >> 8) & 255;
@@ -108,6 +113,9 @@ function hexToHSL(hex) {
 }
 
 function hslToHex({ h, s, l }) {
+  if ([h, s, l].some((v) => Number.isNaN(v))) {
+    return "#8bf7b2";
+  }
   const c = (1 - Math.abs(2 * l / 100 - 1)) * (s / 100);
   const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
   const m = l / 100 - c / 2;
@@ -141,6 +149,25 @@ function hslToHex({ h, s, l }) {
   };
 
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+function normalizeHex(hex, fallback = "#8bf7b2") {
+  return /^#[0-9a-fA-F]{6}$/.test(hex) ? hex : fallback;
+}
+
+function oscillatorMod(audioLevel) {
+  const depth = Number(controls.oscDepth.value);
+  if (depth <= 0) return 0;
+
+  const rate = Number(controls.oscRate.value);
+  const voices = Number(controls.oscVoices.value);
+  const spread = (Number(controls.phaseSpread.value) * Math.PI) / 180;
+
+  let oscSum = 0;
+  for (let v = 0; v < voices; v++) {
+    oscSum += Math.sin(phase * 0.02 * rate + v * spread + audioLevel * 3);
+  }
+  return (oscSum / voices) * depth;
 }
 
 function setupAnalyser() {
@@ -274,7 +301,7 @@ function jitterNoise(index, scale) {
   ) * scale;
 }
 
-function getVertices(dimension, count, metrics) {
+function getVertices(dimension, count, metrics, osc) {
   const vertices = [];
   const distortion = Number(controls.distortion.value);
   const spread = Number(controls.spread.value);
@@ -283,7 +310,7 @@ function getVertices(dimension, count, metrics) {
   const react = Number(controls.audioReact.value);
   const radius = lerp(
     baseRadius,
-    baseRadius * (1.8 + spread + metrics.bass * 0.8),
+    baseRadius * (1.8 + spread + metrics.bass * 0.8 + Math.abs(osc) * 1.2),
     clamp(metrics.level * react, 0, 1)
   );
 
@@ -291,7 +318,9 @@ function getVertices(dimension, count, metrics) {
     for (let i = 0; i < count; i++) {
       const t = i / (count - 1 || 1);
       const x = lerp(-radius, radius, t);
-      const y = jitterNoise(i, distortion * 24 + metrics.mid * 8) + (metrics.level - 0.5) * radius * 0.6;
+      const y =
+        jitterNoise(i, distortion * 24 + metrics.mid * 8 + Math.abs(osc) * 6) +
+        (metrics.level - 0.5 + osc * 0.15) * radius * 0.6;
       vertices.push({ x, y, z: 0 });
     }
     return vertices;
@@ -300,7 +329,8 @@ function getVertices(dimension, count, metrics) {
   if (dimension === 2) {
     for (let i = 0; i < count; i++) {
       const angle = (i / count) * Math.PI * 2 + phase * 0.05;
-      const r = radius * (1 + jitterNoise(i, distortion * 0.2 + metrics.mid * 0.1));
+      const r =
+        radius * (1 + jitterNoise(i, distortion * 0.2 + metrics.mid * 0.1 + Math.abs(osc) * 0.2));
       vertices.push({
         x: Math.cos(angle) * r,
         y: Math.sin(angle) * r,
@@ -314,7 +344,7 @@ function getVertices(dimension, count, metrics) {
   for (let i = 0; i < count; i++) {
     const theta = Math.acos(1 - 2 * ((i + 0.5) / count));
     const phi = Math.PI * (1 + Math.sqrt(5)) * i;
-    const r = radius * (1 + jitterNoise(i, distortion * 0.1 + metrics.treble * 0.06));
+    const r = radius * (1 + jitterNoise(i, distortion * 0.1 + metrics.treble * 0.06 + Math.abs(osc) * 0.2));
     const x = Math.cos(phi) * Math.sin(theta) * r;
     const y = Math.sin(phi) * Math.sin(theta) * r;
     const z = Math.cos(theta) * r * (1 + metrics.level * 0.5);
@@ -385,7 +415,7 @@ function drawGrid() {
   ctx.restore();
 }
 
-function drawOverlay(laserColor, audioLevel) {
+function drawOverlay(laserColor, audioLevel, osc) {
   const mode = controls.shapeMode.value;
   if (!mode || mode === "none") return;
 
@@ -393,14 +423,6 @@ function drawOverlay(laserColor, audioLevel) {
   const size = Number(controls.shapeSize.value);
   const baseRadius = canvas.height * 0.22 * scale * size;
   const depth = Number(controls.oscDepth.value);
-  const rate = Number(controls.oscRate.value);
-  const voices = Number(controls.oscVoices.value);
-  const spread = (Number(controls.phaseSpread.value) * Math.PI) / 180;
-  let oscSum = 0;
-  for (let v = 0; v < voices; v++) {
-    oscSum += Math.sin(phase * 0.02 * rate + v * spread + audioLevel * 3);
-  }
-  const osc = (oscSum / voices) * depth;
   const modulation = 1 + osc + audioLevel * depth * 0.8;
   const cx = canvas.width / 2 + Number(controls.offsetX.value);
   const cy = canvas.height / 2 + Number(controls.offsetY.value);
@@ -520,6 +542,7 @@ function drawWaveform(metrics, laserColor) {
 function render() {
   const metrics = getAudioMetrics();
   const audioLevel = metrics.level;
+  const osc = oscillatorMod(audioLevel);
   const feedback = Number(controls.feedback.value);
   ctx.fillStyle = `rgba(3, 12, 7, ${feedback})`;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -542,17 +565,18 @@ function render() {
 
   const dimension = Number(controls.dimension.value);
   const vertexCount = Number(controls.vertexCount.value);
-  state.vertices = getVertices(dimension, vertexCount, metrics);
+  state.vertices = getVertices(dimension, vertexCount, metrics, osc);
 
-  const baseHSL = hexToHSL(controls.color.value);
+  const baseHex = normalizeHex(controls.color.value);
+  const baseHSL = hexToHSL(baseHex);
   const pulse = Number(controls.colorPulse.value);
   const pulseInfluence = pulse * (0.4 + audioLevel * 0.9 + metrics.beat * 0.6);
   const laserHue = (baseHSL.h + phase * 0.25 + audioLevel * 220 * pulse + metrics.beat * 65) % 360;
-  const laserColor = hslToHex({
+  const laserColor = normalizeHex(hslToHex({
     h: laserHue,
     s: clamp(baseHSL.s * (1 + pulseInfluence * 0.9) + metrics.bass * 32, 0, 100),
     l: clamp(baseHSL.l * (0.9 + pulseInfluence * 0.6) + metrics.beat * 10 - pulse * 4, 8, 92),
-  });
+  }), baseHex);
 
   const bloom = Number(controls.bloom.value);
   ctx.strokeStyle = laserColor;
@@ -610,7 +634,7 @@ function render() {
     ctx.restore();
   }
 
-  drawOverlay(laserColor, audioLevel);
+  drawOverlay(laserColor, audioLevel, osc);
   drawWaveform(metrics, laserColor);
 
   ctx.fillStyle = laserColor;
@@ -621,8 +645,10 @@ function render() {
     ctx.fill();
   });
 
-  state.rotation += Number(controls.rotation.value) * (controls.reactiveStyle.value === "strobe" ? 1.5 : 1);
-  phase += 1 + metrics.level * 0.6;
+  const rotationGain = 1 + Math.abs(osc) * 0.8 + metrics.level * 0.3;
+  state.rotation +=
+    Number(controls.rotation.value) * rotationGain * (controls.reactiveStyle.value === "strobe" ? 1.5 : 1);
+  phase += (1 + metrics.level * 0.6) * (1 + Math.abs(osc) * 0.8);
   requestAnimationFrame(render);
 }
 
