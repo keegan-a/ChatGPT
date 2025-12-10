@@ -8,6 +8,8 @@ const controls = {
   color: document.getElementById("color"),
   displayScale: document.getElementById("displayScale"),
   colorPulse: document.getElementById("colorPulse"),
+  offsetX: document.getElementById("offsetX"),
+  offsetY: document.getElementById("offsetY"),
   feedback: document.getElementById("feedback"),
   distortion: document.getElementById("distortion"),
   audioReact: document.getElementById("audioReact"),
@@ -17,6 +19,10 @@ const controls = {
   feedbackDistortion: document.getElementById("feedbackDistortion"),
   mirrorIntensity: document.getElementById("mirrorIntensity"),
   bloom: document.getElementById("bloom"),
+  shapeMode: document.getElementById("shapeMode"),
+  shapeSize: document.getElementById("shapeSize"),
+  oscRate: document.getElementById("oscRate"),
+  oscDepth: document.getElementById("oscDepth"),
   playPause: document.getElementById("playPause"),
   reset: document.getElementById("reset"),
   audioInput: document.getElementById("audioInput"),
@@ -293,8 +299,8 @@ function project(point) {
   const perspective = distance / (distance + z2 + 1);
 
   return {
-    x: x1 * perspective + canvas.width / 2,
-    y: y1 * perspective + canvas.height / 2,
+    x: x1 * perspective + canvas.width / 2 + Number(controls.offsetX.value),
+    y: y1 * perspective + canvas.height / 2 + Number(controls.offsetY.value),
   };
 }
 
@@ -315,6 +321,92 @@ function drawGrid() {
     ctx.lineTo(canvas.width, y);
     ctx.stroke();
   }
+  ctx.restore();
+}
+
+function drawOverlay(laserColor, audioLevel) {
+  const mode = controls.shapeMode.value;
+  if (!mode || mode === "none") return;
+
+  const scale = Number(controls.displayScale.value);
+  const size = Number(controls.shapeSize.value);
+  const baseRadius = canvas.height * 0.22 * scale * size;
+  const depth = Number(controls.oscDepth.value);
+  const rate = Number(controls.oscRate.value);
+  const osc = Math.sin(phase * 0.02 * rate + audioLevel * 3) * depth;
+  const modulation = 1 + osc + audioLevel * depth * 0.6;
+  const cx = canvas.width / 2 + Number(controls.offsetX.value);
+  const cy = canvas.height / 2 + Number(controls.offsetY.value);
+
+  ctx.save();
+  ctx.strokeStyle = laserColor;
+  ctx.lineWidth = Math.max(1, Number(controls.thickness.value) * 0.6);
+  ctx.globalAlpha = 0.55 + audioLevel * 0.35;
+  ctx.shadowBlur = Number(controls.bloom.value) * 0.5;
+  ctx.shadowColor = laserColor;
+  ctx.globalCompositeOperation = "lighter";
+
+  const drawLissajous = () => {
+    const points = 220;
+    ctx.beginPath();
+    for (let i = 0; i <= points; i++) {
+      const t = (i / points) * Math.PI * 2;
+      const x = cx + Math.sin(t * 3 + phase * 0.01) * baseRadius * modulation;
+      const y = cy + Math.sin(t * 4 + phase * 0.015) * baseRadius * modulation * 0.8;
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  };
+
+  const drawSpiral = () => {
+    const turns = 4;
+    const steps = 240;
+    ctx.beginPath();
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const angle = t * Math.PI * 2 * turns + phase * 0.01;
+      const r = baseRadius * modulation * (0.2 + t);
+      const x = cx + Math.cos(angle) * r;
+      const y = cy + Math.sin(angle) * r;
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  };
+
+  const drawPolygon = () => {
+    const sides = 6;
+    ctx.beginPath();
+    for (let i = 0; i <= sides; i++) {
+      const angle = (i / sides) * Math.PI * 2 + phase * 0.01;
+      const wobble = Math.sin(i * 0.8 + phase * 0.05) * depth * 12;
+      const r = baseRadius * modulation + wobble;
+      const x = cx + Math.cos(angle) * r;
+      const y = cy + Math.sin(angle) * r;
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.stroke();
+  };
+
+  switch (mode) {
+    case "circle":
+      ctx.beginPath();
+      ctx.arc(cx, cy, baseRadius * modulation, 0, Math.PI * 2);
+      ctx.stroke();
+      break;
+    case "polygon":
+      drawPolygon();
+      break;
+    case "lissajous":
+      drawLissajous();
+      break;
+    case "spiral":
+      drawSpiral();
+      break;
+    default:
+      break;
+  }
+
   ctx.restore();
 }
 
@@ -400,6 +492,8 @@ function drawGrid() {
       ctx.stroke();
       ctx.restore();
     }
+
+    drawOverlay(laserColor, audioLevel);
 
     ctx.fillStyle = laserColor;
     projected.forEach((p, i) => {

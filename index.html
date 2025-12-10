@@ -41,9 +41,19 @@
             <input type="range" id="displayScale" min="0.2" max="1.2" step="0.02" value="0.6" />
             <span class="value" data-for="displayScale">0.60</span>
           </label>
+          <label>Offset X
+            <input type="range" id="offsetX" min="-420" max="420" step="5" value="0" />
+            <span class="value" data-for="offsetX">0</span>
+          </label>
+        </div>
+        <div class="two-col">
           <label>Color pulse
             <input type="range" id="colorPulse" min="0" max="1" step="0.05" value="0.45" />
             <span class="value" data-for="colorPulse">0.45</span>
+          </label>
+          <label>Offset Y
+            <input type="range" id="offsetY" min="-320" max="320" step="5" value="0" />
+            <span class="value" data-for="offsetY">0</span>
           </label>
         </div>
         <div class="two-col">
@@ -84,6 +94,31 @@
           <label>Laser bloom
             <input type="range" id="bloom" min="0" max="30" step="1" value="16" />
             <span class="value" data-for="bloom">16</span>
+          </label>
+        </div>
+        <div class="two-col">
+          <label>Shape overlay
+            <select id="shapeMode">
+              <option value="none">None (vertices only)</option>
+              <option value="circle">Circle</option>
+              <option value="polygon">Polygon</option>
+              <option value="lissajous">Lissajous</option>
+              <option value="spiral">Spiral</option>
+            </select>
+          </label>
+          <label>Overlay size
+            <input type="range" id="shapeSize" min="0.3" max="2" step="0.05" value="1" />
+            <span class="value" data-for="shapeSize">1.00</span>
+          </label>
+        </div>
+        <div class="two-col">
+          <label>Oscillator rate
+            <input type="range" id="oscRate" min="0" max="6" step="0.1" value="1.6" />
+            <span class="value" data-for="oscRate">1.6</span>
+          </label>
+          <label>Oscillator depth
+            <input type="range" id="oscDepth" min="0" max="1" step="0.02" value="0.4" />
+            <span class="value" data-for="oscDepth">0.40</span>
           </label>
         </div>
         <div class="buttons">

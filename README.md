@@ -11,6 +11,7 @@ Open `index.html` in any modern browser. No build step is required.
 - **Vertices**: Number of points used to form the laser mesh. Every vertex connects to every other.
 - **Color**: Pick the laser hue.
 - **Display scale**: Shrink or enlarge the projected form to keep it comfortably on screen.
+- **Offset X / Offset Y**: Reposition the projection without changing scale to keep it in frame.
 - **Color pulse**: Adds audio-reactive hue shifts for shimmering lasers.
 - **Background glow**: Higher values increase afterglow for trailing feedback.
 - **Distortion / Feedback distortion**: Adds jitter and drift to the geometry.
@@ -19,6 +20,8 @@ Open `index.html` in any modern browser. No build step is required.
 - **Laser thickness**: Control line width and point size.
 - **Feedback frames**: Generates mirror-like echo frames for infinite tunnel effects.
 - **Laser bloom**: Increase glow intensity for brighter beams.
+- **Shape overlay / Overlay size**: Add simple shapes (circle, polygon, Lissajous, spiral) that sit on top of the vertices with adjustable scale.
+- **Oscillator rate / depth**: Animate overlay shapes with LFO-style movement and tie them to the incoming audio.
 - **Reset wave**: Re-randomizes jitter for a fresh pattern.
 
 ## Notes
