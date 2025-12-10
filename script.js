@@ -13,6 +13,10 @@ const controls = {
   feedback: document.getElementById("feedback"),
   distortion: document.getElementById("distortion"),
   audioReact: document.getElementById("audioReact"),
+  audioBoost: document.getElementById("audioBoost"),
+  reactiveStyle: document.getElementById("reactiveStyle"),
+  beatSensitivity: document.getElementById("beatSensitivity"),
+  waveformMix: document.getElementById("waveformMix"),
   rotation: document.getElementById("rotation"),
   thickness: document.getElementById("thickness"),
   spread: document.getElementById("spread"),
@@ -23,6 +27,10 @@ const controls = {
   shapeSize: document.getElementById("shapeSize"),
   oscRate: document.getElementById("oscRate"),
   oscDepth: document.getElementById("oscDepth"),
+  oscVoices: document.getElementById("oscVoices"),
+  phaseSpread: document.getElementById("phaseSpread"),
+  timebase: document.getElementById("timebase"),
+  traceBrightness: document.getElementById("traceBrightness"),
   playPause: document.getElementById("playPause"),
   reset: document.getElementById("reset"),
   audioInput: document.getElementById("audioInput"),
@@ -44,6 +52,7 @@ values.forEach((val) => {
 let audioContext;
 let analyser;
 let dataArray;
+let timeDomainArray;
 let mediaElementSource;
 let isPlaying = false;
 let audioReady = false;
@@ -54,6 +63,8 @@ const state = {
   vertices: [],
   rotation: 0,
   jitterSeed: Math.random() * 1000,
+  beat: 0,
+  beatAvg: 0,
 };
 
 function clamp(value, min, max) {
@@ -140,6 +151,7 @@ function setupAnalyser() {
     analyser = audioContext.createAnalyser();
     analyser.fftSize = 1024;
     dataArray = new Uint8Array(analyser.frequencyBinCount);
+    timeDomainArray = new Uint8Array(analyser.fftSize);
   }
 }
 
@@ -201,11 +213,54 @@ controls.reset.addEventListener("click", () => {
   phase = 0;
 });
 
-function getAudioLevel() {
-  if (!analyser || !dataArray) return 0;
+function getAudioMetrics() {
+  if (!analyser || !dataArray || !timeDomainArray) {
+    return { level: 0, bass: 0, mid: 0, treble: 0, waveform: [] };
+  }
+
   analyser.getByteFrequencyData(dataArray);
-  const peak = dataArray.reduce((acc, v) => Math.max(acc, v), 0);
-  return peak / 255;
+  analyser.getByteTimeDomainData(timeDomainArray);
+
+  const fftSize = dataArray.length;
+  const level = dataArray.reduce((acc, v) => acc + v, 0) / (fftSize * 255);
+  const energy = Math.sqrt(
+    timeDomainArray.reduce((acc, v) => {
+      const centered = v - 128;
+      return acc + centered * centered;
+    }, 0) / timeDomainArray.length
+  ) / 128;
+
+  const band = (start, end) => {
+    let sum = 0;
+    for (let i = start; i < end; i++) sum += dataArray[i];
+    return sum / ((end - start) * 255);
+  };
+
+  const bass = band(0, Math.floor(fftSize * 0.12));
+  const mid = band(Math.floor(fftSize * 0.12), Math.floor(fftSize * 0.45));
+  const treble = band(Math.floor(fftSize * 0.45), fftSize);
+
+  const waveform = Array.from(timeDomainArray, (v) => (v - 128) / 128);
+
+  const blendedLevel = clamp((level * 0.6 + energy * 0.4) * Number(controls.audioBoost.value), 0, 5);
+
+  // Beat detector: track a slow average, trigger when energy surpasses it by sensitivity
+  state.beatAvg = lerp(state.beatAvg || blendedLevel, blendedLevel, 0.05);
+  const sensitivity = Number(controls.beatSensitivity.value);
+  if (blendedLevel > state.beatAvg + sensitivity * 0.4) {
+    state.beat = 1;
+  } else {
+    state.beat = lerp(state.beat, 0, 0.1);
+  }
+
+  return {
+    level: blendedLevel,
+    bass,
+    mid,
+    treble,
+    waveform,
+    beat: state.beat,
+  };
 }
 
 function lerp(a, b, t) {
@@ -218,19 +273,24 @@ function jitterNoise(index, scale) {
   ) * scale;
 }
 
-  function getVertices(dimension, count, audioLevel) {
-    const vertices = [];
-    const distortion = Number(controls.distortion.value);
-    const spread = Number(controls.spread.value);
-    const scale = Number(controls.displayScale.value);
-    const baseRadius = canvas.height * 0.22 * scale;
-    const radius = lerp(baseRadius, baseRadius * (1.5 + spread), audioLevel * Number(controls.audioReact.value));
+function getVertices(dimension, count, metrics) {
+  const vertices = [];
+  const distortion = Number(controls.distortion.value);
+  const spread = Number(controls.spread.value);
+  const scale = Number(controls.displayScale.value);
+  const baseRadius = canvas.height * 0.22 * scale;
+  const react = Number(controls.audioReact.value);
+  const radius = lerp(
+    baseRadius,
+    baseRadius * (1.8 + spread + metrics.bass * 0.8),
+    clamp(metrics.level * react, 0, 1)
+  );
 
   if (dimension === 1) {
     for (let i = 0; i < count; i++) {
       const t = i / (count - 1 || 1);
       const x = lerp(-radius, radius, t);
-      const y = jitterNoise(i, distortion * 20) + (audioLevel - 0.5) * radius * 0.3;
+      const y = jitterNoise(i, distortion * 24 + metrics.mid * 8) + (metrics.level - 0.5) * radius * 0.6;
       vertices.push({ x, y, z: 0 });
     }
     return vertices;
@@ -239,7 +299,7 @@ function jitterNoise(index, scale) {
   if (dimension === 2) {
     for (let i = 0; i < count; i++) {
       const angle = (i / count) * Math.PI * 2 + phase * 0.05;
-      const r = radius * (1 + jitterNoise(i, distortion * 0.15));
+      const r = radius * (1 + jitterNoise(i, distortion * 0.2 + metrics.mid * 0.1));
       vertices.push({
         x: Math.cos(angle) * r,
         y: Math.sin(angle) * r,
@@ -253,10 +313,10 @@ function jitterNoise(index, scale) {
   for (let i = 0; i < count; i++) {
     const theta = Math.acos(1 - 2 * ((i + 0.5) / count));
     const phi = Math.PI * (1 + Math.sqrt(5)) * i;
-    const r = radius * (1 + jitterNoise(i, distortion * 0.08));
+    const r = radius * (1 + jitterNoise(i, distortion * 0.1 + metrics.treble * 0.06));
     const x = Math.cos(phi) * Math.sin(theta) * r;
     const y = Math.sin(phi) * Math.sin(theta) * r;
-    const z = Math.cos(theta) * r * (1 + audioLevel * 0.5);
+    const z = Math.cos(theta) * r * (1 + metrics.level * 0.5);
     vertices.push({ x, y, z });
   }
 
@@ -333,8 +393,14 @@ function drawOverlay(laserColor, audioLevel) {
   const baseRadius = canvas.height * 0.22 * scale * size;
   const depth = Number(controls.oscDepth.value);
   const rate = Number(controls.oscRate.value);
-  const osc = Math.sin(phase * 0.02 * rate + audioLevel * 3) * depth;
-  const modulation = 1 + osc + audioLevel * depth * 0.6;
+  const voices = Number(controls.oscVoices.value);
+  const spread = (Number(controls.phaseSpread.value) * Math.PI) / 180;
+  let oscSum = 0;
+  for (let v = 0; v < voices; v++) {
+    oscSum += Math.sin(phase * 0.02 * rate + v * spread + audioLevel * 3);
+  }
+  const osc = (oscSum / voices) * depth;
+  const modulation = 1 + osc + audioLevel * depth * 0.8;
   const cx = canvas.width / 2 + Number(controls.offsetX.value);
   const cy = canvas.height / 2 + Number(controls.offsetY.value);
 
@@ -410,11 +476,52 @@ function drawOverlay(laserColor, audioLevel) {
   ctx.restore();
 }
 
-  function render() {
-    const audioLevel = getAudioLevel();
-    const feedback = Number(controls.feedback.value);
-    ctx.fillStyle = `rgba(3, 12, 7, ${feedback})`;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+function drawWaveform(metrics, laserColor) {
+  const mix = Number(controls.waveformMix.value);
+  if (mix <= 0.001 || !metrics.waveform.length) return;
+
+  const timebase = Number(controls.timebase.value);
+  const brightness = Number(controls.traceBrightness.value);
+  const cx = canvas.width / 2 + Number(controls.offsetX.value);
+  const cy = canvas.height / 2 + Number(controls.offsetY.value);
+  const scale = Number(controls.displayScale.value);
+  const width = canvas.width * 0.7 * scale;
+  const height = canvas.height * 0.32 * scale;
+
+  ctx.save();
+  ctx.translate(cx - width / 2, cy);
+  ctx.globalAlpha = clamp(mix * (0.4 + metrics.level * 0.6), 0, 1);
+  ctx.strokeStyle = laserColor;
+  ctx.lineWidth = Math.max(1, Number(controls.thickness.value) * 0.8);
+  ctx.shadowBlur = Number(controls.bloom.value) * 0.4 * brightness;
+  ctx.shadowColor = laserColor;
+  ctx.globalCompositeOperation = "screen";
+
+  ctx.beginPath();
+  metrics.waveform.forEach((v, i) => {
+    const t = (i / metrics.waveform.length) * timebase;
+    const x = (t / timebase) * width;
+    const y = -v * height * (0.6 + metrics.bass * 0.8);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.strokeStyle = `rgba(255,255,255,${0.18 * brightness})`;
+  ctx.lineWidth = 1;
+  ctx.moveTo(0, 0);
+  ctx.lineTo(width, 0);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function render() {
+  const metrics = getAudioMetrics();
+  const audioLevel = metrics.level;
+  const feedback = Number(controls.feedback.value);
+  ctx.fillStyle = `rgba(3, 12, 7, ${feedback})`;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     const mirrorIntensity = Number(controls.mirrorIntensity.value);
     if (mirrorIntensity > 0.001) {
@@ -430,83 +537,92 @@ function drawOverlay(laserColor, audioLevel) {
       ctx.restore();
     }
 
-    drawGrid();
+  drawGrid();
 
-    const dimension = Number(controls.dimension.value);
-    const vertexCount = Number(controls.vertexCount.value);
-    state.vertices = getVertices(dimension, vertexCount, audioLevel);
+  const dimension = Number(controls.dimension.value);
+  const vertexCount = Number(controls.vertexCount.value);
+  state.vertices = getVertices(dimension, vertexCount, metrics);
 
-    const baseHSL = hexToHSL(controls.color.value);
-    const pulse = Number(controls.colorPulse.value);
-    const laserHue = (baseHSL.h + phase * 0.3 + audioLevel * 360 * pulse) % 360;
-    const laserColor = hslToHex({
-      h: laserHue,
-      s: clamp(baseHSL.s + audioLevel * pulse * 30, 0, 100),
-      l: clamp(baseHSL.l + audioLevel * pulse * 12 - pulse * 6, 0, 100),
+  const baseHSL = hexToHSL(controls.color.value);
+  const pulse = Number(controls.colorPulse.value);
+  const laserHue = (baseHSL.h + phase * 0.3 + audioLevel * 360 * pulse + metrics.beat * 40) % 360;
+  const laserColor = hslToHex({
+    h: laserHue,
+    s: clamp(baseHSL.s + audioLevel * pulse * 35 + metrics.bass * 40, 0, 100),
+    l: clamp(baseHSL.l + audioLevel * pulse * 16 - pulse * 6 + metrics.beat * 12, 0, 100),
+  });
+
+  const bloom = Number(controls.bloom.value);
+  ctx.strokeStyle = laserColor;
+  ctx.lineWidth = Number(controls.thickness.value) * (1 + audioLevel * 0.6 + metrics.beat * 0.6);
+  ctx.shadowBlur = bloom + audioLevel * (10 + pulse * 24) + metrics.beat * 20;
+  ctx.shadowColor = laserColor;
+
+  const offsetStrength = Number(controls.feedbackDistortion.value);
+  const distortion = Number(controls.distortion.value);
+
+  const reactiveMode = controls.reactiveStyle.value;
+  const zigzagPhase = reactiveMode === "zigzag" ? Math.sin(phase * 0.07) * 18 : 0;
+
+  const projected = state.vertices.map((v, i) => {
+    const wobble = jitterNoise(i, distortion * 4 + audioLevel * 10 + metrics.treble * 6);
+    const zigzag = reactiveMode === "zigzag" ? Math.sin(i * 0.9 + phase * 0.2) * (8 + metrics.level * 40) : 0;
+    const pulseScale = reactiveMode === "pulse" ? 1 + metrics.beat * 0.9 : 1;
+    const projectedPoint = project({
+      x: (v.x + wobble + zigzagPhase) * pulseScale,
+      y: (v.y + wobble + zigzag) * pulseScale,
+      z: v.z + wobble,
     });
+    projectedPoint.x += Math.sin(phase * 0.1 + i) * offsetStrength * (1 + metrics.level * 0.8);
+    projectedPoint.y += Math.cos(phase * 0.1 + i) * offsetStrength * (1 + metrics.level * 0.8);
+    return projectedPoint;
+  });
 
-    const bloom = Number(controls.bloom.value);
-    ctx.strokeStyle = laserColor;
-    ctx.lineWidth = Number(controls.thickness.value) * (1 + audioLevel * 0.4);
-    ctx.shadowBlur = bloom + audioLevel * (10 + pulse * 20);
-    ctx.shadowColor = laserColor;
+  const strobe = controls.reactiveStyle.value === "strobe" ? 0.4 + metrics.treble * 1.2 : 1;
+  ctx.globalAlpha = clamp(0.8 * strobe, 0.05, 1);
 
-    const offsetStrength = Number(controls.feedbackDistortion.value);
-    const distortion = Number(controls.distortion.value);
-
-    const projected = state.vertices.map((v, i) => {
-      const wobble = jitterNoise(i, distortion * 4 + audioLevel * 8);
-      const projectedPoint = project({
-        x: v.x + wobble,
-        y: v.y + wobble,
-        z: v.z + wobble,
-      });
-      projectedPoint.x += Math.sin(phase * 0.1 + i) * offsetStrength;
-      projectedPoint.y += Math.cos(phase * 0.1 + i) * offsetStrength;
-      return projectedPoint;
-    });
-
-    ctx.beginPath();
-    for (let i = 0; i < projected.length; i++) {
-      for (let j = i + 1; j < projected.length; j++) {
-        const a = projected[i];
-        const b = projected[j];
-        ctx.moveTo(a.x, a.y);
-        ctx.lineTo(b.x, b.y);
-      }
+  ctx.beginPath();
+  for (let i = 0; i < projected.length; i++) {
+    for (let j = i + 1; j < projected.length; j++) {
+      const a = projected[i];
+      const b = projected[j];
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
     }
-    ctx.stroke();
-
-    if (projected.length > 2) {
-      ctx.save();
-      ctx.globalCompositeOperation = "lighter";
-      ctx.globalAlpha = 0.4 + audioLevel * 0.35;
-      ctx.strokeStyle = `hsla(${(laserHue + 120) % 360}, 90%, 70%, 0.7)`;
-      ctx.lineWidth = Math.max(1, Number(controls.thickness.value) * 0.6);
-      ctx.beginPath();
-      ctx.moveTo(projected[0].x, projected[0].y);
-      for (let i = 1; i < projected.length; i++) {
-        ctx.lineTo(projected[i].x, projected[i].y);
-      }
-      ctx.closePath();
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    drawOverlay(laserColor, audioLevel);
-
-    ctx.fillStyle = laserColor;
-    projected.forEach((p, i) => {
-      ctx.beginPath();
-      const pulseRadius = 2.5 + audioLevel * 2 + Math.sin(phase * 0.05 + i) * 0.6 * pulse;
-      ctx.arc(p.x, p.y, pulseRadius, 0, Math.PI * 2);
-      ctx.fill();
-    });
-
-    state.rotation += Number(controls.rotation.value);
-    phase += 1;
-    requestAnimationFrame(render);
   }
+  ctx.stroke();
+
+  if (projected.length > 2) {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = 0.4 + audioLevel * 0.35 + metrics.beat * 0.4;
+    ctx.strokeStyle = `hsla(${(laserHue + 120) % 360}, 90%, 70%, 0.7)`;
+    ctx.lineWidth = Math.max(1, Number(controls.thickness.value) * 0.6);
+    ctx.beginPath();
+    ctx.moveTo(projected[0].x, projected[0].y);
+    for (let i = 1; i < projected.length; i++) {
+      ctx.lineTo(projected[i].x, projected[i].y);
+    }
+    ctx.closePath();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  drawOverlay(laserColor, audioLevel);
+  drawWaveform(metrics, laserColor);
+
+  ctx.fillStyle = laserColor;
+  projected.forEach((p, i) => {
+    ctx.beginPath();
+    const pulseRadius = 2.5 + audioLevel * 2.5 + Math.sin(phase * 0.05 + i) * 0.8 * pulse + metrics.beat * 3;
+    ctx.arc(p.x, p.y, pulseRadius, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  state.rotation += Number(controls.rotation.value) * (controls.reactiveStyle.value === "strobe" ? 1.5 : 1);
+  phase += 1 + metrics.level * 0.6;
+  requestAnimationFrame(render);
+}
 
 function resize() {
   const rect = canvas.getBoundingClientRect();

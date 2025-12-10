@@ -67,6 +67,30 @@
           </label>
         </div>
         <div class="two-col">
+          <label>Audio boost
+            <input type="range" id="audioBoost" min="1" max="8" step="0.1" value="2.6" />
+            <span class="value" data-for="audioBoost">2.60</span>
+          </label>
+          <label>Reactive style
+            <select id="reactiveStyle">
+              <option value="fluid">Fluid</option>
+              <option value="pulse">Pulse</option>
+              <option value="zigzag">Zig-zag</option>
+              <option value="strobe">Strobe</option>
+            </select>
+          </label>
+        </div>
+        <div class="two-col">
+          <label>Beat sensitivity
+            <input type="range" id="beatSensitivity" min="0" max="1" step="0.05" value="0.45" />
+            <span class="value" data-for="beatSensitivity">0.45</span>
+          </label>
+          <label>Waveform mix
+            <input type="range" id="waveformMix" min="0" max="1" step="0.05" value="0.5" />
+            <span class="value" data-for="waveformMix">0.50</span>
+          </label>
+        </div>
+        <div class="two-col">
           <label>Rotation speed
             <input type="range" id="rotation" min="0" max="0.03" step="0.001" value="0.012" />
             <span class="value" data-for="rotation">0.012</span>
@@ -119,6 +143,26 @@
           <label>Oscillator depth
             <input type="range" id="oscDepth" min="0" max="1" step="0.02" value="0.4" />
             <span class="value" data-for="oscDepth">0.40</span>
+          </label>
+        </div>
+        <div class="two-col">
+          <label>Osc voices
+            <input type="range" id="oscVoices" min="1" max="4" step="1" value="2" />
+            <span class="value" data-for="oscVoices">2</span>
+          </label>
+          <label>Phase spread
+            <input type="range" id="phaseSpread" min="0" max="180" step="5" value="60" />
+            <span class="value" data-for="phaseSpread">60</span>
+          </label>
+        </div>
+        <div class="two-col">
+          <label>Timebase (trace speed)
+            <input type="range" id="timebase" min="0.5" max="4" step="0.1" value="1.4" />
+            <span class="value" data-for="timebase">1.40</span>
+          </label>
+          <label>Trace brightness
+            <input type="range" id="traceBrightness" min="0" max="1" step="0.05" value="0.6" />
+            <span class="value" data-for="traceBrightness">0.60</span>
           </label>
         </div>
         <div class="buttons">

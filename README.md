@@ -16,12 +16,18 @@ Open `index.html` in any modern browser. No build step is required.
 - **Background glow**: Higher values increase afterglow for trailing feedback.
 - **Distortion / Feedback distortion**: Adds jitter and drift to the geometry.
 - **Audio reactiveness / Amplitude spread**: Blend in audio energy to expand the shapes.
+- **Audio boost**: Multiply the analyser response so the visuals move dramatically with the track.
+- **Reactive style**: Choose how the visuals respond (fluid, beat-pulsing, zig-zag wobble, or strobe).
+- **Beat sensitivity**: Tune how easily the detector latches onto peaks to drive pulsing.
+- **Waveform mix**: Blend a real-time oscilloscope trace into the scene.
 - **Rotation speed**: Adjust the rotation of the projected forms.
 - **Laser thickness**: Control line width and point size.
 - **Feedback frames**: Generates mirror-like echo frames for infinite tunnel effects.
 - **Laser bloom**: Increase glow intensity for brighter beams.
 - **Shape overlay / Overlay size**: Add simple shapes (circle, polygon, Lissajous, spiral) that sit on top of the vertices with adjustable scale.
 - **Oscillator rate / depth**: Animate overlay shapes with LFO-style movement and tie them to the incoming audio.
+- **Osc voices / Phase spread**: Layer multiple oscillators and fan their phases for richer motion.
+- **Timebase / Trace brightness**: Control oscilloscope trace speed and brightness for the signal display.
 - **Reset wave**: Re-randomizes jitter for a fresh pattern.
 
 ## Notes
