@@ -1,5 +1,6 @@
 const canvas = document.getElementById("display");
 const ctx = canvas.getContext("2d");
+const audioElement = document.getElementById("audioPlayer");
 
 const controls = {
   dimension: document.getElementById("dimension"),
@@ -32,12 +33,11 @@ values.forEach((val) => {
 
 let audioContext;
 let analyser;
-let audioBufferSource;
 let dataArray;
+let mediaElementSource;
 let isPlaying = false;
 let audioReady = false;
-let hasStarted = false;
-let currentBuffer;
+let currentObjectUrl;
 let phase = 0;
 
 const state = {
@@ -46,45 +46,41 @@ const state = {
   jitterSeed: Math.random() * 1000,
 };
 
-function setupAudio(buffer) {
+function setupAnalyser() {
   if (!audioContext) {
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
   }
-
-  if (audioBufferSource) {
-    audioBufferSource.stop();
+  if (!analyser) {
+    analyser = audioContext.createAnalyser();
+    analyser.fftSize = 1024;
+    dataArray = new Uint8Array(analyser.frequencyBinCount);
   }
-
-  audioBufferSource = audioContext.createBufferSource();
-  audioBufferSource.buffer = buffer;
-  currentBuffer = buffer;
-  hasStarted = false;
-  isPlaying = false;
-
-  analyser = audioContext.createAnalyser();
-  analyser.fftSize = 1024;
-  const bufferLength = analyser.frequencyBinCount;
-  dataArray = new Uint8Array(bufferLength);
-
-  audioBufferSource.connect(analyser);
-  analyser.connect(audioContext.destination);
-
-  audioBufferSource.onended = () => {
-    isPlaying = false;
-    hasStarted = false;
-    controls.playPause.textContent = "Play";
-  };
 }
 
 async function loadAudio(file) {
-  const arrayBuffer = await file.arrayBuffer();
-  if (!audioContext) {
-    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  if (!file) return;
+  if (currentObjectUrl) {
+    URL.revokeObjectURL(currentObjectUrl);
   }
-  const buffer = await audioContext.decodeAudioData(arrayBuffer);
-  setupAudio(buffer);
+  currentObjectUrl = URL.createObjectURL(file);
+  audioElement.pause();
+  audioElement.currentTime = 0;
+  audioElement.src = currentObjectUrl;
+  await audioElement.load?.();
+
+  setupAnalyser();
+
+  if (mediaElementSource) {
+    mediaElementSource.disconnect();
+  }
+  mediaElementSource = audioContext.createMediaElementSource(audioElement);
+  mediaElementSource.connect(analyser);
+  analyser.connect(audioContext.destination);
+
   audioReady = true;
+  isPlaying = false;
   controls.playPause.disabled = false;
+  controls.playPause.textContent = "Play";
 }
 
 controls.audioInput.addEventListener("change", (event) => {
@@ -94,27 +90,24 @@ controls.audioInput.addEventListener("change", (event) => {
 });
 
 controls.playPause.addEventListener("click", () => {
-  if (!audioReady || !audioContext || !currentBuffer) return;
+  if (!audioReady || !audioContext || !analyser) return;
 
-  if (!hasStarted) {
-    setupAudio(currentBuffer);
-    audioContext.resume();
-    audioBufferSource.start(0);
-    hasStarted = true;
+  audioContext.resume();
+
+  if (audioElement.paused) {
+    audioElement.play();
     isPlaying = true;
     controls.playPause.textContent = "Pause";
-    return;
-  }
-
-  if (isPlaying) {
-    audioContext.suspend();
+  } else {
+    audioElement.pause();
     isPlaying = false;
     controls.playPause.textContent = "Resume";
-  } else {
-    audioContext.resume();
-    isPlaying = true;
-    controls.playPause.textContent = "Pause";
   }
+});
+
+audioElement.addEventListener("ended", () => {
+  isPlaying = false;
+  controls.playPause.textContent = "Play";
 });
 
 controls.reset.addEventListener("click", () => {
