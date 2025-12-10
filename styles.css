@@ -27,7 +27,9 @@ body {
   display: grid;
   grid-template-columns: 380px 1fr;
   gap: 1.5rem;
-  padding: 1.5rem;
+  padding: clamp(1rem, 2vw, 1.5rem);
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
 .control-panel {
