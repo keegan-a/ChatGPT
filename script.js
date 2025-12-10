@@ -242,19 +242,20 @@ function getAudioMetrics() {
 
   const waveform = Array.from(timeDomainArray, (v) => (v - 128) / 128);
 
-  const blendedLevel = clamp((level * 0.6 + energy * 0.4) * Number(controls.audioBoost.value), 0, 5);
+  const blendedLevel = (level * 0.6 + energy * 0.4) * Number(controls.audioBoost.value);
+  const scaledLevel = clamp(Math.pow(blendedLevel, 0.85) * 1.35, 0, 1.6);
 
   // Beat detector: track a slow average, trigger when energy surpasses it by sensitivity
-  state.beatAvg = lerp(state.beatAvg || blendedLevel, blendedLevel, 0.05);
+  state.beatAvg = lerp(state.beatAvg || scaledLevel, scaledLevel, 0.08);
   const sensitivity = Number(controls.beatSensitivity.value);
-  if (blendedLevel > state.beatAvg + sensitivity * 0.4) {
+  if (scaledLevel > state.beatAvg + sensitivity * 0.25) {
     state.beat = 1;
   } else {
     state.beat = lerp(state.beat, 0, 0.1);
   }
 
   return {
-    level: blendedLevel,
+    level: scaledLevel,
     bass,
     mid,
     treble,
@@ -545,11 +546,12 @@ function render() {
 
   const baseHSL = hexToHSL(controls.color.value);
   const pulse = Number(controls.colorPulse.value);
-  const laserHue = (baseHSL.h + phase * 0.3 + audioLevel * 360 * pulse + metrics.beat * 40) % 360;
+  const pulseInfluence = pulse * (0.4 + audioLevel * 0.9 + metrics.beat * 0.6);
+  const laserHue = (baseHSL.h + phase * 0.25 + audioLevel * 220 * pulse + metrics.beat * 65) % 360;
   const laserColor = hslToHex({
     h: laserHue,
-    s: clamp(baseHSL.s + audioLevel * pulse * 35 + metrics.bass * 40, 0, 100),
-    l: clamp(baseHSL.l + audioLevel * pulse * 16 - pulse * 6 + metrics.beat * 12, 0, 100),
+    s: clamp(baseHSL.s * (1 + pulseInfluence * 0.9) + metrics.bass * 32, 0, 100),
+    l: clamp(baseHSL.l * (0.9 + pulseInfluence * 0.6) + metrics.beat * 10 - pulse * 4, 8, 92),
   });
 
   const bloom = Number(controls.bloom.value);
@@ -562,12 +564,12 @@ function render() {
   const distortion = Number(controls.distortion.value);
 
   const reactiveMode = controls.reactiveStyle.value;
-  const zigzagPhase = reactiveMode === "zigzag" ? Math.sin(phase * 0.07) * 18 : 0;
+  const zigzagPhase = reactiveMode === "zigzag" ? Math.sin(phase * 0.07) * (12 + metrics.level * 18) : 0;
 
   const projected = state.vertices.map((v, i) => {
-    const wobble = jitterNoise(i, distortion * 4 + audioLevel * 10 + metrics.treble * 6);
-    const zigzag = reactiveMode === "zigzag" ? Math.sin(i * 0.9 + phase * 0.2) * (8 + metrics.level * 40) : 0;
-    const pulseScale = reactiveMode === "pulse" ? 1 + metrics.beat * 0.9 : 1;
+    const wobble = jitterNoise(i, distortion * 6 + audioLevel * 12 + metrics.treble * 7);
+    const zigzag = reactiveMode === "zigzag" ? Math.sin(i * 0.9 + phase * 0.2) * (6 + metrics.level * 28 + metrics.beat * 12) : 0;
+    const pulseScale = reactiveMode === "pulse" ? 1 + metrics.beat * 0.9 + metrics.level * 0.25 : 1;
     const projectedPoint = project({
       x: (v.x + wobble + zigzagPhase) * pulseScale,
       y: (v.y + wobble + zigzag) * pulseScale,
@@ -578,8 +580,8 @@ function render() {
     return projectedPoint;
   });
 
-  const strobe = controls.reactiveStyle.value === "strobe" ? 0.4 + metrics.treble * 1.2 : 1;
-  ctx.globalAlpha = clamp(0.8 * strobe, 0.05, 1);
+  const strobe = controls.reactiveStyle.value === "strobe" ? 0.45 + metrics.treble * 1.05 : 1;
+  ctx.globalAlpha = clamp(0.65 * strobe, 0.12, 1);
 
   ctx.beginPath();
   for (let i = 0; i < projected.length; i++) {

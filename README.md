@@ -11,7 +11,7 @@ Open `index.html` in any modern browser. No build step is required.
 - **Vertices**: Number of points used to form the laser mesh. Every vertex connects to every other.
 - **Color**: Pick the laser hue.
 - **Display scale**: Shrink or enlarge the projected form to keep it comfortably on screen.
-- **Offset X / Offset Y**: Reposition the projection without changing scale to keep it in frame.
+- **Offset X / Offset Y**: Reposition the projection widely (±720px) without changing scale to keep it in frame.
 - **Color pulse**: Adds audio-reactive hue shifts for shimmering lasers.
 - **Background glow**: Higher values increase afterglow for trailing feedback.
 - **Distortion / Feedback distortion**: Adds jitter and drift to the geometry.
