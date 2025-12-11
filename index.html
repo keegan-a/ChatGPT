@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Laser Vertex Lab</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="layout">
+    <section class="panel">
+      <h1>Laser Vertex Lab</h1>
+      <div class="section">
+        <h2>Audio</h2>
+        <label class="control">Audio file<input type="file" id="audioInput" accept="audio/*" /></label>
+        <button id="playPause" class="pill">Play</button>
+        <div class="row">
+          <label class="control">Gain<input type="range" id="gain" min="0.5" max="8" step="0.1" value="2" /><span class="value" data-for="gain"></span></label>
+          <label class="control">Sensitivity<input type="range" id="sensitivity" min="0.2" max="4" step="0.05" value="1.5" /><span class="value" data-for="sensitivity"></span></label>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Geometry</h2>
+        <div class="row">
+          <label class="control">Dimension<input type="range" id="dimension" min="1" max="5" step="1" value="3" /><span class="value" data-for="dimension"></span></label>
+          <label class="control">Vertices<input type="range" id="vertexCount" min="3" max="64" step="1" value="18" /><span class="value" data-for="vertexCount"></span></label>
+        </div>
+        <div class="row">
+          <label class="control">Scale<input type="range" id="scale" min="0.4" max="1.2" step="0.02" value="0.8" /><span class="value" data-for="scale"></span></label>
+          <label class="control">Spread<input type="range" id="spread" min="0" max="160" step="1" value="40" /><span class="value" data-for="spread"></span></label>
+        </div>
+        <div class="row">
+          <label class="control">Offset X<input type="range" id="offsetX" min="-900" max="900" step="1" value="0" /><span class="value" data-for="offsetX"></span></label>
+          <label class="control">Offset Y<input type="range" id="offsetY" min="-900" max="900" step="1" value="0" /><span class="value" data-for="offsetY"></span></label>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Reactivity</h2>
+        <label class="control">Reactive mode
+          <select id="reactiveMode">
+            <option value="pulse">Pulse</option>
+            <option value="zigzag">Zig-zag</option>
+            <option value="orbit">Orbit</option>
+            <option value="swarm">Swarm</option>
+          </select>
+        </label>
+        <div class="row">
+          <label class="control">Color rate<input type="range" id="colorRate" min="0.2" max="3" step="0.05" value="1.2" /><span class="value" data-for="colorRate"></span></label>
+          <label class="control">Color program
+            <select id="colorProgram">
+              <option value="rainbow">Rainbow trail</option>
+              <option value="dots">Dotted beam</option>
+              <option value="lines">Striped lines</option>
+              <option value="retro90">Retro 90s</option>
+              <option value="retro2000">Retro 2000s</option>
+            </select>
+          </label>
+        </div>
+        <div class="row">
+          <label class="control">Trace trail<input type="range" id="trail" min="0.1" max="0.95" step="0.01" value="0.75" /><span class="value" data-for="trail"></span></label>
+          <label class="control">Bloom<input type="range" id="bloom" min="0" max="1.2" step="0.05" value="0.45" /><span class="value" data-for="bloom"></span></label>
+        </div>
+        <div class="row">
+          <label class="control">Hue drift<input type="range" id="hueDrift" min="0" max="240" step="1" value="120" /><span class="value" data-for="hueDrift"></span></label>
+          <label class="control">Palette
+            <select id="palette">
+              <option value="aurora">Aurora</option>
+              <option value="neon">Neon</option>
+              <option value="sunset">Sunset</option>
+              <option value="mono">Monochrome</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Oscillators</h2>
+        <div class="row">
+          <label class="control">Voices<input type="range" id="oscVoices" min="1" max="6" step="1" value="2" /><span class="value" data-for="oscVoices"></span></label>
+          <label class="control">Rate<input type="range" id="oscRate" min="0.2" max="9" step="0.1" value="2.6" /><span class="value" data-for="oscRate"></span></label>
+        </div>
+        <div class="row">
+          <label class="control">Depth<input type="range" id="oscDepth" min="0" max="120" step="1" value="60" /><span class="value" data-for="oscDepth"></span></label>
+          <label class="control">Phase spread<input type="range" id="phaseSpread" min="0" max="180" step="5" value="60" /><span class="value" data-for="phaseSpread"></span></label>
+        </div>
+        <div class="row">
+          <label class="control">Timebase<input type="range" id="timebase" min="0.4" max="2.4" step="0.05" value="1" /><span class="value" data-for="timebase"></span></label>
+          <label class="control">Trace gain<input type="range" id="traceGain" min="0" max="1" step="0.05" value="0.4" /><span class="value" data-for="traceGain"></span></label>
+        </div>
+      </div>
+    </section>
+
+    <section class="display">
+      <canvas id="display"></canvas>
+      <audio id="audioPlayer" hidden></audio>
+    </section>
+  </main>
+  <script src="script.js"></script>
+</body>
+</html>
