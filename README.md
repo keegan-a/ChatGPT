@@ -1,39 +1,42 @@
 # Laser Vertex Lab
 
-An oscilloscope-inspired canvas visualizer that draws multi-dimensional "laser vertices" responding to an uploaded audio signal. Controls let you sculpt color, distortion, feedback, and dimension from 1D through a duplicated & miniaturized 5D projection.
+A refreshed oscilloscope-inspired visualizer that treats your audio like a laser playground. Upload a track, pick a reactive style, and watch multi-dimensional meshes, neon palettes, and layered oscillators dance in time.
 
 ## Running locally
-Open `index.html` in any modern browser. No build step is required.
+Open `index.html` in any modern browser. No build steps required.
 
-## Controls
-- **Audio file**: Upload an audio clip to drive the visualizer; press **Play** to start.
-- **Dimension (1-5D)**: Choose how many dimensional layers to stack. 4D and 5D duplicate the 3D form at 50% and 25% scale for nested projections.
-- **Vertices**: Number of points used to form the laser mesh. Every vertex connects to every other.
-- **Color**: Pick the laser hue.
-- **Display scale**: Shrink or enlarge the projected form to keep it comfortably on screen.
-- **Offset X / Offset Y**: Reposition the projection widely (±720px) without changing scale to keep it in frame.
-- **Color pulse**: Adds audio-reactive hue shifts for shimmering lasers.
-- **Background glow**: Higher values increase afterglow for trailing feedback.
-- **Distortion / Feedback distortion**: Adds jitter and drift to the geometry.
-- **Audio reactiveness / Amplitude spread**: Blend in audio energy to expand the shapes.
-- **Audio boost**: Multiply the analyser response so the visuals move dramatically with the track.
-- **Reactive style**: Choose how the visuals respond (fluid, beat-pulsing, zig-zag wobble, or strobe).
-- **Beat sensitivity**: Tune how easily the detector latches onto peaks to drive pulsing.
-- **Waveform mix**: Blend a real-time oscilloscope trace into the scene.
-- **Rotation speed**: Adjust the rotation of the projected forms.
-- **Laser thickness**: Control line width and point size.
-- **Feedback frames**: Generates mirror-like echo frames for infinite tunnel effects.
-- **Laser bloom**: Increase glow intensity for brighter beams.
-- **Shape overlay / Overlay size**: Add simple shapes (circle, polygon, Lissajous, spiral) that sit on top of the vertices with adjustable scale.
-- **Oscillator rate / depth**: Animate overlay shapes with LFO-style movement and tie them to the incoming audio.
-- **Osc voices / Phase spread**: Layer multiple oscillators and fan their phases for richer motion.
-- **Timebase / Trace brightness**: Control oscilloscope trace speed and brightness for the signal display.
-- **Reset wave**: Re-randomizes jitter for a fresh pattern.
+## Controls at a glance
+### Audio & sensitivity
+- **Audio file**: Upload an audio clip to drive everything.
+- **Play / Pause**: Toggle playback.
+- **Gain**: Boost analyser energy for harder hits.
+- **Sensitivity**: Raises or lowers the beat gate; higher values lock onto transients faster.
 
-## Notes
-- Audio playback can be paused/resumed from the play control after it starts.
-- The canvas scales to device pixel ratio for crisp lines; resizing the window will update resolution automatically.
+### Geometry
+- **Dimension (1–5)**: Stack laser projections up to 5D (4D/5D shrink to half/quarter scale for nested echoes).
+- **Vertices**: Number of points in the mesh (all vertices connect to each other).
+- **Scale**: Resize the projection to keep it on-screen.
+- **Spread**: Push depth apart for more parallax.
+- **Offset X / Offset Y**: Move the projection anywhere in the viewport (±900px).
+
+### Reactivity
+- **Reactive mode**: Choose how motion responds to audio: *Pulse*, *Zig-zag*, *Orbit*, or *Swarm*.
+- **Trace trail**: Controls persistence; higher values leave longer ghost trails.
+- **Bloom**: Adds weight to line thickness and glow.
+- **Hue drift**: Shifts palette hues over time.
+- **Palette**: Swap between Aurora, Neon, Sunset, or Monochrome color sets.
+
+### Oscillators & trace
+- **Voices**: Number of LFO voices used to wobble geometry.
+- **Rate / Depth**: Speed and amount of oscillator modulation.
+- **Phase spread**: Fans oscillator phases for stereo-like motion.
+- **Timebase**: Speeds up rotation and oscillator timing (oscilloscope-style).
+- **Trace gain**: How bright the captured waveform trace appears on the display.
+
+## What changed
+- Rebuilt the renderer for stronger, beat-visible motion with new reactive styles and heavier analyser gain.
+- Added palette-driven color cycling, waveform tracing, and multi-voice oscillators that modulate mesh radius and wobble.
+- Simplified the UI into clear sections so controls read like oscilloscope knobs instead of scattered options.
 
 ## Contributing
-- See `AGENTS.md` for the multi-agent workflow (scope → architecture → tests → implementation → debug → review → docs).
-- Each role has clear responsibilities; follow the sequence to keep changes organized and well-reviewed.
+See `AGENTS.md` for the multi-agent workflow (scope → architecture → tests → implementation → debug → review → docs). Each role has clear responsibilities; follow the sequence to keep changes organized and well-reviewed.

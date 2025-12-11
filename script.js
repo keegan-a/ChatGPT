@@ -1,665 +1,273 @@
 const canvas = document.getElementById("display");
 const ctx = canvas.getContext("2d");
-const audioElement = document.getElementById("audioPlayer");
+const audio = document.getElementById("audioPlayer");
 
 const controls = {
+  audioInput: document.getElementById("audioInput"),
+  playPause: document.getElementById("playPause"),
+  gain: document.getElementById("gain"),
+  sensitivity: document.getElementById("sensitivity"),
   dimension: document.getElementById("dimension"),
   vertexCount: document.getElementById("vertexCount"),
-  color: document.getElementById("color"),
-  displayScale: document.getElementById("displayScale"),
-  colorPulse: document.getElementById("colorPulse"),
+  scale: document.getElementById("scale"),
+  spread: document.getElementById("spread"),
   offsetX: document.getElementById("offsetX"),
   offsetY: document.getElementById("offsetY"),
-  feedback: document.getElementById("feedback"),
-  distortion: document.getElementById("distortion"),
-  audioReact: document.getElementById("audioReact"),
-  audioBoost: document.getElementById("audioBoost"),
-  reactiveStyle: document.getElementById("reactiveStyle"),
-  beatSensitivity: document.getElementById("beatSensitivity"),
-  waveformMix: document.getElementById("waveformMix"),
-  rotation: document.getElementById("rotation"),
-  thickness: document.getElementById("thickness"),
-  spread: document.getElementById("spread"),
-  feedbackDistortion: document.getElementById("feedbackDistortion"),
-  mirrorIntensity: document.getElementById("mirrorIntensity"),
+  reactiveMode: document.getElementById("reactiveMode"),
+  trail: document.getElementById("trail"),
   bloom: document.getElementById("bloom"),
-  shapeMode: document.getElementById("shapeMode"),
-  shapeSize: document.getElementById("shapeSize"),
+  hueDrift: document.getElementById("hueDrift"),
+  palette: document.getElementById("palette"),
+  oscVoices: document.getElementById("oscVoices"),
   oscRate: document.getElementById("oscRate"),
   oscDepth: document.getElementById("oscDepth"),
-  oscVoices: document.getElementById("oscVoices"),
   phaseSpread: document.getElementById("phaseSpread"),
   timebase: document.getElementById("timebase"),
-  traceBrightness: document.getElementById("traceBrightness"),
-  playPause: document.getElementById("playPause"),
-  reset: document.getElementById("reset"),
-  audioInput: document.getElementById("audioInput"),
+  traceGain: document.getElementById("traceGain"),
 };
 
 const values = document.querySelectorAll(".value");
 values.forEach((val) => {
-  const forId = val.dataset.for;
-  const input = document.getElementById(forId);
+  const input = document.getElementById(val.dataset.for);
   if (!input) return;
-  const update = () => {
-    const suffix = forId === "dimension" ? "D" : "";
-    val.textContent = `${Number(input.value).toFixed(input.step && Number(input.step) < 1 ? 2 : 0)}${suffix}`;
-  };
+  const update = () => (val.textContent = Number(input.value).toFixed(input.step && Number(input.step) < 1 ? 2 : 0));
   input.addEventListener("input", update);
   update();
 });
 
-let audioContext;
+let audioCtx;
 let analyser;
 let dataArray;
-let timeDomainArray;
-let mediaElementSource;
+let timeArray;
+let source;
 let isPlaying = false;
-let audioReady = false;
-let currentObjectUrl;
-let phase = 0;
+let objectUrl;
 
 const state = {
-  vertices: [],
-  rotation: 0,
-  jitterSeed: Math.random() * 1000,
+  time: 0,
+  beatEnergy: 0,
   beat: 0,
-  beatAvg: 0,
+  hue: 140,
+  rotation: 0,
 };
 
-function clamp(value, min, max) {
-  return Math.min(Math.max(value, min), max);
-}
-
-function hexToHSL(hex) {
-  const sanitized = hex?.replace("#", "");
-  // Fallback to a bright green if parsing fails
-  if (!sanitized || !/^[0-9a-fA-F]{6}$/.test(sanitized)) {
-    return { h: 140, s: 90, l: 70 };
-  }
-
-  const num = parseInt(sanitized, 16);
-  const r = (num >> 16) & 255;
-  const g = (num >> 8) & 255;
-  const b = num & 255;
-  const rP = r / 255;
-  const gP = g / 255;
-  const bP = b / 255;
-  const max = Math.max(rP, gP, bP);
-  const min = Math.min(rP, gP, bP);
-  let h;
-  let s;
-  const l = (max + min) / 2;
-
-  if (max === min) {
-    h = s = 0;
-  } else {
-    const d = max - min;
-    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-    switch (max) {
-      case rP:
-        h = (gP - bP) / d + (gP < bP ? 6 : 0);
-        break;
-      case gP:
-        h = (bP - rP) / d + 2;
-        break;
-      default:
-        h = (rP - gP) / d + 4;
-        break;
-    }
-    h /= 6;
-  }
-  return { h: h * 360, s: s * 100, l: l * 100 };
-}
-
-function hslToHex({ h, s, l }) {
-  if ([h, s, l].some((v) => Number.isNaN(v))) {
-    return "#8bf7b2";
-  }
-  const c = (1 - Math.abs(2 * l / 100 - 1)) * (s / 100);
-  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
-  const m = l / 100 - c / 2;
-  let r = 0;
-  let g = 0;
-  let b = 0;
-
-  if (h >= 0 && h < 60) {
-    r = c;
-    g = x;
-  } else if (h < 120) {
-    r = x;
-    g = c;
-  } else if (h < 180) {
-    g = c;
-    b = x;
-  } else if (h < 240) {
-    g = x;
-    b = c;
-  } else if (h < 300) {
-    r = x;
-    b = c;
-  } else {
-    r = c;
-    b = x;
-  }
-
-  const toHex = (v) => {
-    const hex = Math.round((v + m) * 255).toString(16).padStart(2, "0");
-    return hex;
-  };
-
-  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
-}
-
-function normalizeHex(hex, fallback = "#8bf7b2") {
-  return /^#[0-9a-fA-F]{6}$/.test(hex) ? hex : fallback;
-}
-
-function oscillatorMod(audioLevel) {
-  const depth = Number(controls.oscDepth.value);
-  if (depth <= 0) return 0;
-
-  const rate = Number(controls.oscRate.value);
-  const voices = Number(controls.oscVoices.value);
-  const spread = (Number(controls.phaseSpread.value) * Math.PI) / 180;
-
-  let oscSum = 0;
-  for (let v = 0; v < voices; v++) {
-    oscSum += Math.sin(phase * 0.02 * rate + v * spread + audioLevel * 3);
-  }
-  return (oscSum / voices) * depth;
-}
-
-function setupAnalyser() {
-  if (!audioContext) {
-    audioContext = new (window.AudioContext || window.webkitAudioContext)();
-  }
-  if (!analyser) {
-    analyser = audioContext.createAnalyser();
-    analyser.fftSize = 1024;
-    dataArray = new Uint8Array(analyser.frequencyBinCount);
-    timeDomainArray = new Uint8Array(analyser.fftSize);
-  }
-}
-
-async function loadAudio(file) {
-  if (!file) return;
-  if (currentObjectUrl) {
-    URL.revokeObjectURL(currentObjectUrl);
-  }
-  currentObjectUrl = URL.createObjectURL(file);
-  audioElement.pause();
-  audioElement.currentTime = 0;
-  audioElement.src = currentObjectUrl;
-  await audioElement.load?.();
-
-  setupAnalyser();
-
-  if (mediaElementSource) {
-    mediaElementSource.disconnect();
-  }
-  mediaElementSource = audioContext.createMediaElementSource(audioElement);
-  mediaElementSource.connect(analyser);
-  analyser.connect(audioContext.destination);
-
-  audioReady = true;
-  isPlaying = false;
-  controls.playPause.disabled = false;
-  controls.playPause.textContent = "Play";
-}
-
-controls.audioInput.addEventListener("change", (event) => {
-  const file = event.target.files?.[0];
-  if (!file) return;
-  loadAudio(file);
-});
-
-controls.playPause.addEventListener("click", () => {
-  if (!audioReady || !audioContext || !analyser) return;
-
-  audioContext.resume();
-
-  if (audioElement.paused) {
-    audioElement.play();
-    isPlaying = true;
-    controls.playPause.textContent = "Pause";
-  } else {
-    audioElement.pause();
-    isPlaying = false;
-    controls.playPause.textContent = "Resume";
-  }
-});
-
-audioElement.addEventListener("ended", () => {
-  isPlaying = false;
-  controls.playPause.textContent = "Play";
-});
-
-controls.reset.addEventListener("click", () => {
-  state.jitterSeed = Math.random() * 1000;
-  phase = 0;
-});
-
-function getAudioMetrics() {
-  if (!analyser || !dataArray || !timeDomainArray) {
-    return { level: 0, bass: 0, mid: 0, treble: 0, waveform: [] };
-  }
-
-  analyser.getByteFrequencyData(dataArray);
-  analyser.getByteTimeDomainData(timeDomainArray);
-
-  const fftSize = dataArray.length;
-  const level = dataArray.reduce((acc, v) => acc + v, 0) / (fftSize * 255);
-  const energy = Math.sqrt(
-    timeDomainArray.reduce((acc, v) => {
-      const centered = v - 128;
-      return acc + centered * centered;
-    }, 0) / timeDomainArray.length
-  ) / 128;
-
-  const band = (start, end) => {
-    let sum = 0;
-    for (let i = start; i < end; i++) sum += dataArray[i];
-    return sum / ((end - start) * 255);
-  };
-
-  const bass = band(0, Math.floor(fftSize * 0.12));
-  const mid = band(Math.floor(fftSize * 0.12), Math.floor(fftSize * 0.45));
-  const treble = band(Math.floor(fftSize * 0.45), fftSize);
-
-  const waveform = Array.from(timeDomainArray, (v) => (v - 128) / 128);
-
-  const blendedLevel = (level * 0.6 + energy * 0.4) * Number(controls.audioBoost.value);
-  const scaledLevel = clamp(Math.pow(blendedLevel, 0.85) * 1.35, 0, 1.6);
-
-  // Beat detector: track a slow average, trigger when energy surpasses it by sensitivity
-  state.beatAvg = lerp(state.beatAvg || scaledLevel, scaledLevel, 0.08);
-  const sensitivity = Number(controls.beatSensitivity.value);
-  if (scaledLevel > state.beatAvg + sensitivity * 0.25) {
-    state.beat = 1;
-  } else {
-    state.beat = lerp(state.beat, 0, 0.1);
-  }
-
-  return {
-    level: scaledLevel,
-    bass,
-    mid,
-    treble,
-    waveform,
-    beat: state.beat,
-  };
-}
-
-function lerp(a, b, t) {
-  return a + (b - a) * t;
-}
-
-function jitterNoise(index, scale) {
-  return (
-    Math.sin(index * 12.9898 + state.jitterSeed + phase * 0.2) * 43758.5453 % 1
-  ) * scale;
-}
-
-function getVertices(dimension, count, metrics, osc) {
-  const vertices = [];
-  const distortion = Number(controls.distortion.value);
-  const spread = Number(controls.spread.value);
-  const scale = Number(controls.displayScale.value);
-  const baseRadius = canvas.height * 0.22 * scale;
-  const react = Number(controls.audioReact.value);
-  const radius = lerp(
-    baseRadius,
-    baseRadius * (1.8 + spread + metrics.bass * 0.8 + Math.abs(osc) * 1.2),
-    clamp(metrics.level * react, 0, 1)
-  );
-
-  if (dimension === 1) {
-    for (let i = 0; i < count; i++) {
-      const t = i / (count - 1 || 1);
-      const x = lerp(-radius, radius, t);
-      const y =
-        jitterNoise(i, distortion * 24 + metrics.mid * 8 + Math.abs(osc) * 6) +
-        (metrics.level - 0.5 + osc * 0.15) * radius * 0.6;
-      vertices.push({ x, y, z: 0 });
-    }
-    return vertices;
-  }
-
-  if (dimension === 2) {
-    for (let i = 0; i < count; i++) {
-      const angle = (i / count) * Math.PI * 2 + phase * 0.05;
-      const r =
-        radius * (1 + jitterNoise(i, distortion * 0.2 + metrics.mid * 0.1 + Math.abs(osc) * 0.2));
-      vertices.push({
-        x: Math.cos(angle) * r,
-        y: Math.sin(angle) * r,
-        z: 0,
-      });
-    }
-    return vertices;
-  }
-
-  // 3D and higher
-  for (let i = 0; i < count; i++) {
-    const theta = Math.acos(1 - 2 * ((i + 0.5) / count));
-    const phi = Math.PI * (1 + Math.sqrt(5)) * i;
-    const r = radius * (1 + jitterNoise(i, distortion * 0.1 + metrics.treble * 0.06 + Math.abs(osc) * 0.2));
-    const x = Math.cos(phi) * Math.sin(theta) * r;
-    const y = Math.sin(phi) * Math.sin(theta) * r;
-    const z = Math.cos(theta) * r * (1 + metrics.level * 0.5);
-    vertices.push({ x, y, z });
-  }
-
-  if (dimension >= 4) {
-    const scaled = vertices.map((v) => ({
-      x: v.x * 0.5,
-      y: v.y * 0.5,
-      z: v.z * 0.5,
-    }));
-    vertices.push(...scaled);
-  }
-
-  if (dimension >= 5) {
-    const scaled = vertices.map((v) => ({
-      x: v.x * 0.5,
-      y: v.y * 0.5,
-      z: v.z * 0.5,
-    }));
-    vertices.push(...scaled);
-  }
-
-  return vertices;
-}
-
-function project(point) {
-  const a = state.rotation;
-
-  // rotate around y and x for motion
-  const cosA = Math.cos(a);
-  const sinA = Math.sin(a);
-  const cosB = Math.cos(a * 0.8);
-  const sinB = Math.sin(a * 0.8);
-
-  const x1 = point.x * cosA - point.z * sinA;
-  const z1 = point.x * sinA + point.z * cosA;
-  const y1 = point.y * cosB - z1 * sinB;
-  const z2 = point.y * sinB + z1 * cosB;
-
-  const distance = 420;
-  const perspective = distance / (distance + z2 + 1);
-
-  return {
-    x: x1 * perspective + canvas.width / 2 + Number(controls.offsetX.value),
-    y: y1 * perspective + canvas.height / 2 + Number(controls.offsetY.value),
-  };
-}
-
-function drawGrid() {
-  ctx.save();
-  ctx.strokeStyle = "rgba(158, 250, 165, 0.08)";
-  ctx.lineWidth = 1;
-  const step = 40;
-  for (let x = 0; x < canvas.width; x += step) {
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, canvas.height);
-    ctx.stroke();
-  }
-  for (let y = 0; y < canvas.height; y += step) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(canvas.width, y);
-    ctx.stroke();
-  }
-  ctx.restore();
-}
-
-function drawOverlay(laserColor, audioLevel, osc) {
-  const mode = controls.shapeMode.value;
-  if (!mode || mode === "none") return;
-
-  const scale = Number(controls.displayScale.value);
-  const size = Number(controls.shapeSize.value);
-  const baseRadius = canvas.height * 0.22 * scale * size;
-  const depth = Number(controls.oscDepth.value);
-  const modulation = 1 + osc + audioLevel * depth * 0.8;
-  const cx = canvas.width / 2 + Number(controls.offsetX.value);
-  const cy = canvas.height / 2 + Number(controls.offsetY.value);
-
-  ctx.save();
-  ctx.strokeStyle = laserColor;
-  ctx.lineWidth = Math.max(1, Number(controls.thickness.value) * 0.6);
-  ctx.globalAlpha = 0.55 + audioLevel * 0.35;
-  ctx.shadowBlur = Number(controls.bloom.value) * 0.5;
-  ctx.shadowColor = laserColor;
-  ctx.globalCompositeOperation = "lighter";
-
-  const drawLissajous = () => {
-    const points = 220;
-    ctx.beginPath();
-    for (let i = 0; i <= points; i++) {
-      const t = (i / points) * Math.PI * 2;
-      const x = cx + Math.sin(t * 3 + phase * 0.01) * baseRadius * modulation;
-      const y = cy + Math.sin(t * 4 + phase * 0.015) * baseRadius * modulation * 0.8;
-      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-    }
-    ctx.stroke();
-  };
-
-  const drawSpiral = () => {
-    const turns = 4;
-    const steps = 240;
-    ctx.beginPath();
-    for (let i = 0; i <= steps; i++) {
-      const t = i / steps;
-      const angle = t * Math.PI * 2 * turns + phase * 0.01;
-      const r = baseRadius * modulation * (0.2 + t);
-      const x = cx + Math.cos(angle) * r;
-      const y = cy + Math.sin(angle) * r;
-      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-    }
-    ctx.stroke();
-  };
-
-  const drawPolygon = () => {
-    const sides = 6;
-    ctx.beginPath();
-    for (let i = 0; i <= sides; i++) {
-      const angle = (i / sides) * Math.PI * 2 + phase * 0.01;
-      const wobble = Math.sin(i * 0.8 + phase * 0.05) * depth * 12;
-      const r = baseRadius * modulation + wobble;
-      const x = cx + Math.cos(angle) * r;
-      const y = cy + Math.sin(angle) * r;
-      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-    }
-    ctx.closePath();
-    ctx.stroke();
-  };
-
-  switch (mode) {
-    case "circle":
-      ctx.beginPath();
-      ctx.arc(cx, cy, baseRadius * modulation, 0, Math.PI * 2);
-      ctx.stroke();
-      break;
-    case "polygon":
-      drawPolygon();
-      break;
-    case "lissajous":
-      drawLissajous();
-      break;
-    case "spiral":
-      drawSpiral();
-      break;
-    default:
-      break;
-  }
-
-  ctx.restore();
-}
-
-function drawWaveform(metrics, laserColor) {
-  const mix = Number(controls.waveformMix.value);
-  if (mix <= 0.001 || !metrics.waveform.length) return;
-
-  const timebase = Number(controls.timebase.value);
-  const brightness = Number(controls.traceBrightness.value);
-  const cx = canvas.width / 2 + Number(controls.offsetX.value);
-  const cy = canvas.height / 2 + Number(controls.offsetY.value);
-  const scale = Number(controls.displayScale.value);
-  const width = canvas.width * 0.7 * scale;
-  const height = canvas.height * 0.32 * scale;
-
-  ctx.save();
-  ctx.translate(cx - width / 2, cy);
-  ctx.globalAlpha = clamp(mix * (0.4 + metrics.level * 0.6), 0, 1);
-  ctx.strokeStyle = laserColor;
-  ctx.lineWidth = Math.max(1, Number(controls.thickness.value) * 0.8);
-  ctx.shadowBlur = Number(controls.bloom.value) * 0.4 * brightness;
-  ctx.shadowColor = laserColor;
-  ctx.globalCompositeOperation = "screen";
-
-  ctx.beginPath();
-  metrics.waveform.forEach((v, i) => {
-    const t = (i / metrics.waveform.length) * timebase;
-    const x = (t / timebase) * width;
-    const y = -v * height * (0.6 + metrics.bass * 0.8);
-    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-  });
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.strokeStyle = `rgba(255,255,255,${0.18 * brightness})`;
-  ctx.lineWidth = 1;
-  ctx.moveTo(0, 0);
-  ctx.lineTo(width, 0);
-  ctx.stroke();
-
-  ctx.restore();
-}
-
-function render() {
-  const metrics = getAudioMetrics();
-  const audioLevel = metrics.level;
-  const osc = oscillatorMod(audioLevel);
-  const feedback = Number(controls.feedback.value);
-  ctx.fillStyle = `rgba(3, 12, 7, ${feedback})`;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    const mirrorIntensity = Number(controls.mirrorIntensity.value);
-    if (mirrorIntensity > 0.001) {
-      const cssWidth = canvas.width / devicePixelRatio;
-      const cssHeight = canvas.height / devicePixelRatio;
-      const mirrorScale = clamp(1 - mirrorIntensity * 0.14 - audioLevel * 0.05, 0.7, 0.98);
-      const dx = (cssWidth - cssWidth * mirrorScale) / 2;
-      const dy = (cssHeight - cssHeight * mirrorScale) / 2;
-      ctx.save();
-      ctx.globalAlpha = mirrorIntensity * 0.9;
-      ctx.globalCompositeOperation = "screen";
-      ctx.drawImage(canvas, dx, dy, cssWidth * mirrorScale, cssHeight * mirrorScale);
-      ctx.restore();
-    }
-
-  drawGrid();
-
-  const dimension = Number(controls.dimension.value);
-  const vertexCount = Number(controls.vertexCount.value);
-  state.vertices = getVertices(dimension, vertexCount, metrics, osc);
-
-  const baseHex = normalizeHex(controls.color.value);
-  const baseHSL = hexToHSL(baseHex);
-  const pulse = Number(controls.colorPulse.value);
-  const pulseInfluence = pulse * (0.4 + audioLevel * 0.9 + metrics.beat * 0.6);
-  const laserHue = (baseHSL.h + phase * 0.25 + audioLevel * 220 * pulse + metrics.beat * 65) % 360;
-  const laserColor = normalizeHex(hslToHex({
-    h: laserHue,
-    s: clamp(baseHSL.s * (1 + pulseInfluence * 0.9) + metrics.bass * 32, 0, 100),
-    l: clamp(baseHSL.l * (0.9 + pulseInfluence * 0.6) + metrics.beat * 10 - pulse * 4, 8, 92),
-  }), baseHex);
-
-  const bloom = Number(controls.bloom.value);
-  ctx.strokeStyle = laserColor;
-  ctx.lineWidth = Number(controls.thickness.value) * (1 + audioLevel * 0.6 + metrics.beat * 0.6);
-  ctx.shadowBlur = bloom + audioLevel * (10 + pulse * 24) + metrics.beat * 20;
-  ctx.shadowColor = laserColor;
-
-  const offsetStrength = Number(controls.feedbackDistortion.value);
-  const distortion = Number(controls.distortion.value);
-
-  const reactiveMode = controls.reactiveStyle.value;
-  const zigzagPhase = reactiveMode === "zigzag" ? Math.sin(phase * 0.07) * (12 + metrics.level * 18) : 0;
-
-  const projected = state.vertices.map((v, i) => {
-    const wobble = jitterNoise(i, distortion * 6 + audioLevel * 12 + metrics.treble * 7);
-    const zigzag = reactiveMode === "zigzag" ? Math.sin(i * 0.9 + phase * 0.2) * (6 + metrics.level * 28 + metrics.beat * 12) : 0;
-    const pulseScale = reactiveMode === "pulse" ? 1 + metrics.beat * 0.9 + metrics.level * 0.25 : 1;
-    const projectedPoint = project({
-      x: (v.x + wobble + zigzagPhase) * pulseScale,
-      y: (v.y + wobble + zigzag) * pulseScale,
-      z: v.z + wobble,
-    });
-    projectedPoint.x += Math.sin(phase * 0.1 + i) * offsetStrength * (1 + metrics.level * 0.8);
-    projectedPoint.y += Math.cos(phase * 0.1 + i) * offsetStrength * (1 + metrics.level * 0.8);
-    return projectedPoint;
-  });
-
-  const strobe = controls.reactiveStyle.value === "strobe" ? 0.45 + metrics.treble * 1.05 : 1;
-  ctx.globalAlpha = clamp(0.65 * strobe, 0.12, 1);
-
-  ctx.beginPath();
-  for (let i = 0; i < projected.length; i++) {
-    for (let j = i + 1; j < projected.length; j++) {
-      const a = projected[i];
-      const b = projected[j];
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(b.x, b.y);
-    }
-  }
-  ctx.stroke();
-
-  if (projected.length > 2) {
-    ctx.save();
-    ctx.globalCompositeOperation = "lighter";
-    ctx.globalAlpha = 0.4 + audioLevel * 0.35 + metrics.beat * 0.4;
-    ctx.strokeStyle = `hsla(${(laserHue + 120) % 360}, 90%, 70%, 0.7)`;
-    ctx.lineWidth = Math.max(1, Number(controls.thickness.value) * 0.6);
-    ctx.beginPath();
-    ctx.moveTo(projected[0].x, projected[0].y);
-    for (let i = 1; i < projected.length; i++) {
-      ctx.lineTo(projected[i].x, projected[i].y);
-    }
-    ctx.closePath();
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  drawOverlay(laserColor, audioLevel, osc);
-  drawWaveform(metrics, laserColor);
-
-  ctx.fillStyle = laserColor;
-  projected.forEach((p, i) => {
-    ctx.beginPath();
-    const pulseRadius = 2.5 + audioLevel * 2.5 + Math.sin(phase * 0.05 + i) * 0.8 * pulse + metrics.beat * 3;
-    ctx.arc(p.x, p.y, pulseRadius, 0, Math.PI * 2);
-    ctx.fill();
-  });
-
-  const rotationGain = 1 + Math.abs(osc) * 0.8 + metrics.level * 0.3;
-  state.rotation +=
-    Number(controls.rotation.value) * rotationGain * (controls.reactiveStyle.value === "strobe" ? 1.5 : 1);
-  phase += (1 + metrics.level * 0.6) * (1 + Math.abs(osc) * 0.8);
-  requestAnimationFrame(render);
-}
+const palettes = {
+  aurora: [180, 210, 150],
+  neon: [120, 280, 320],
+  sunset: [20, 35, 300],
+  mono: [140, 140, 140],
+};
 
 function resize() {
-  const rect = canvas.getBoundingClientRect();
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  canvas.width = rect.width * devicePixelRatio;
-  canvas.height = rect.height * devicePixelRatio;
-  ctx.scale(devicePixelRatio, devicePixelRatio);
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = canvas.clientWidth * dpr;
+  canvas.height = canvas.clientHeight * dpr;
+  ctx.scale(dpr, dpr);
 }
 
 window.addEventListener("resize", resize);
 resize();
-render();
+
+function setupAudio() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (!analyser) {
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 2048;
+    dataArray = new Uint8Array(analyser.frequencyBinCount);
+    timeArray = new Uint8Array(analyser.fftSize);
+  }
+}
+
+async function loadFile(file) {
+  if (!file) return;
+  if (objectUrl) URL.revokeObjectURL(objectUrl);
+  objectUrl = URL.createObjectURL(file);
+  audio.src = objectUrl;
+  audio.load();
+  setupAudio();
+  if (source) source.disconnect();
+  source = audioCtx.createMediaElementSource(audio);
+  source.connect(analyser);
+  analyser.connect(audioCtx.destination);
+  controls.playPause.textContent = "Play";
+  isPlaying = false;
+}
+
+controls.audioInput.addEventListener("change", (e) => loadFile(e.target.files[0]));
+
+controls.playPause.addEventListener("click", async () => {
+  if (!audio.src) return;
+  setupAudio();
+  await audioCtx.resume();
+  if (audio.paused) {
+    audio.play();
+    controls.playPause.textContent = "Pause";
+    isPlaying = true;
+  } else {
+    audio.pause();
+    controls.playPause.textContent = "Play";
+    isPlaying = false;
+  }
+});
+
+function hueForPalette() {
+  const set = palettes[controls.palette.value] || palettes.aurora;
+  const base = set[Math.floor((state.time / 3) % set.length)];
+  const drift = Number(controls.hueDrift.value);
+  return (base + state.hue + drift) % 360;
+}
+
+function sampleAudio() {
+  if (!analyser) return { level: 0, beat: 0 };
+  analyser.getByteFrequencyData(dataArray);
+  analyser.getByteTimeDomainData(timeArray);
+
+  const gain = Number(controls.gain.value);
+  const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+  const level = Math.min(1, (avg / 128) * gain);
+
+  const sensitivity = Number(controls.sensitivity.value);
+  state.beatEnergy = state.beatEnergy * 0.9 + level * 0.1;
+  const beat = level > state.beatEnergy * (1 + 0.25 * sensitivity) ? 1 : 0;
+  if (beat) state.beatEnergy = level;
+
+  return { level, beat, waveform: [...timeArray] };
+}
+
+function oscillator(t, audioLevel) {
+  const voices = Number(controls.oscVoices.value);
+  const rate = Number(controls.oscRate.value);
+  const depth = Number(controls.oscDepth.value);
+  const spread = (Number(controls.phaseSpread.value) * Math.PI) / 180;
+  let sum = 0;
+  for (let i = 0; i < voices; i++) {
+    sum += Math.sin((t * rate + i * spread) * controls.timebase.value + audioLevel * 6);
+  }
+  return (sum / voices) * depth;
+}
+
+function clearCanvas(trail) {
+  ctx.fillStyle = `rgba(5, 8, 16, ${1 - trail})`;
+  ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+}
+
+function drawWaveform(waveform, color, level) {
+  const gain = Number(controls.traceGain.value);
+  if (!waveform || gain <= 0) return;
+  ctx.save();
+  ctx.translate(20, canvas.clientHeight - 120);
+  ctx.scale(canvas.clientWidth - 40, 80);
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = color;
+  ctx.globalAlpha = Math.min(1, gain + level * 0.6);
+  ctx.beginPath();
+  waveform.forEach((v, i) => {
+    const x = i / waveform.length;
+    const y = (v / 255 - 0.5) * 0.8 + 0.5;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+  ctx.restore();
+}
+
+function buildVertices(dim, count, radius, level, osc) {
+  const verts = [];
+  const angleStep = (Math.PI * 2) / count;
+  for (let i = 0; i < count; i++) {
+    const a = i * angleStep + state.rotation;
+    const wobble = Math.sin(i * 0.6 + state.time * 0.8 + level * 3) * (radius * 0.08) + osc;
+    verts.push({
+      x: Math.cos(a) * (radius + wobble),
+      y: Math.sin(a) * (radius + wobble),
+      z: Math.sin(a * dim) * (radius * 0.15 + level * 80),
+    });
+  }
+  return verts;
+}
+
+function project({ x, y, z }, depth) {
+  const scale = 1 / (1 + depth * 0.0025 * z);
+  return { x: x * scale, y: y * scale };
+}
+
+function drawMesh(vertices, color, lineWidth) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = lineWidth;
+  for (let i = 0; i < vertices.length; i++) {
+    for (let j = i + 1; j < vertices.length; j++) {
+      const a = vertices[i];
+      const b = vertices[j];
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+    }
+  }
+}
+
+function reactiveOffset(mode, level, beat, i) {
+  switch (mode) {
+    case "pulse":
+      return Math.sin(state.time * 2 + i) * level * 120 + beat * 60;
+    case "zigzag":
+      return ((i % 2 === 0 ? -1 : 1) * level * 180) + Math.sin(state.time * 6 + i) * 30;
+    case "orbit":
+      return Math.sin(state.time * 1.4 + i * 0.6) * 160 * level;
+    case "swarm":
+      return (Math.random() - 0.5) * 220 * level + beat * 80;
+    default:
+      return 0;
+  }
+}
+
+function renderFrame() {
+  requestAnimationFrame(renderFrame);
+  const { level, beat, waveform } = sampleAudio();
+  state.time += 0.016;
+  state.rotation += 0.0015 * Number(controls.timebase.value) + level * 0.01;
+  state.hue = (state.hue + 0.2 + beat * 20) % 360;
+
+  clearCanvas(Number(controls.trail.value));
+  ctx.save();
+  const centerX = canvas.clientWidth / 2 + Number(controls.offsetX.value);
+  const centerY = canvas.clientHeight / 2 + Number(controls.offsetY.value);
+  ctx.translate(centerX, centerY);
+
+  const dim = Number(controls.dimension.value);
+  const layers = Math.max(1, dim);
+  const count = Number(controls.vertexCount.value);
+  const scale = Number(controls.scale.value);
+  const baseRadius = Math.min(canvas.clientWidth, canvas.clientHeight) * 0.32 * scale;
+  const osc = oscillator(state.time, level);
+  const mode = controls.reactiveMode.value;
+  const lineWidth = 1.2 + level * 3 + Number(controls.bloom.value) * 2;
+
+  for (let i = 0; i < layers; i++) {
+    const layerScale = i === 0 ? 1 : i === 3 ? 0.5 : i === 4 ? 0.25 : 1 - i * 0.18;
+    const offset = reactiveOffset(mode, level, beat, i) + osc * 0.2;
+    const radius = baseRadius * layerScale + offset;
+    const verts = buildVertices(dim, count, radius, level, osc);
+    const projected = verts.map((v) => {
+      const spread = Number(controls.spread.value);
+      return project({ x: v.x, y: v.y, z: v.z + spread * (i * 0.4) }, i + 1);
+    });
+
+    const hue = hueForPalette();
+    const stroke = `hsla(${(hue + i * 24) % 360}, 90%, ${60 - i * 6}%, ${0.85 + beat * 0.2})`;
+    drawMesh(projected, stroke, lineWidth);
+  }
+
+  ctx.restore();
+
+  const traceHue = hueForPalette();
+  drawWaveform(
+    waveform,
+    `hsla(${traceHue}, 100%, 70%, ${0.4 + Number(controls.traceGain.value)})`,
+    level
+  );
+}
+
+requestAnimationFrame(renderFrame);
