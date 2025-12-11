@@ -14,6 +14,8 @@ const controls = {
   offsetX: document.getElementById("offsetX"),
   offsetY: document.getElementById("offsetY"),
   reactiveMode: document.getElementById("reactiveMode"),
+  colorRate: document.getElementById("colorRate"),
+  colorProgram: document.getElementById("colorProgram"),
   trail: document.getElementById("trail"),
   bloom: document.getElementById("bloom"),
   hueDrift: document.getElementById("hueDrift"),
@@ -56,6 +58,8 @@ const palettes = {
   neon: [120, 280, 320],
   sunset: [20, 35, 300],
   mono: [140, 140, 140],
+  retro90: [290, 320, 170, 45],
+  retro2000: [200, 160, 30, 340],
 };
 
 function resize() {
@@ -114,9 +118,45 @@ controls.playPause.addEventListener("click", async () => {
 
 function hueForPalette() {
   const set = palettes[controls.palette.value] || palettes.aurora;
-  const base = set[Math.floor((state.time / 3) % set.length)];
+  const rate = Number(controls.colorRate.value);
+  const base = set[Math.floor(((state.time * rate) / 2.5) % set.length)];
   const drift = Number(controls.hueDrift.value);
   return (base + state.hue + drift) % 360;
+}
+
+function programColor(program, idx, total, hueBase, level, beat) {
+  const progress = (idx / total + state.time * 0.25) % 1;
+  const glow = 0.5 + level * 0.4 + beat * 0.3;
+  const white = 12 + beat * 50 + level * 30;
+  const sat = 90;
+
+  switch (program) {
+    case "rainbow": {
+      const hue = (hueBase + progress * 360 + beat * 30) % 360;
+      return `hsla(${hue}, ${sat}%, ${60 + glow * 10}%, ${0.7 + glow * 0.2})`;
+    }
+    case "dots": {
+      const stepHue = (hueBase + idx * 22 + beat * 45) % 360;
+      const blink = 0.45 + (Math.sin(state.time * 8 + idx) + 1) * 0.25 + level * 0.4;
+      return `hsla(${stepHue}, ${sat}%, ${50 + white}%, ${Math.min(1, blink)})`;
+    }
+    case "lines": {
+      const hue = (hueBase + Math.floor(progress * 8) * 30 + level * 90) % 360;
+      return `hsla(${hue}, 85%, ${55 + white * 0.2}%, ${0.6 + glow * 0.3})`;
+    }
+    case "retro90": {
+      const set = palettes.retro90;
+      const hue = set[Math.floor(progress * set.length) % set.length];
+      return `hsla(${(hue + hueBase * 0.2) % 360}, 88%, ${55 + white * 0.15}%, ${0.65 + glow * 0.25})`;
+    }
+    case "retro2000": {
+      const set = palettes.retro2000;
+      const hue = set[Math.floor(progress * set.length) % set.length];
+      return `hsla(${(hue + hueBase * 0.15 + beat * 24) % 360}, 94%, ${50 + white * 0.25}%, ${0.7 + glow * 0.25})`;
+    }
+    default:
+      return `hsla(${hueBase}, ${sat}%, ${58 + white * 0.2}%, ${0.7 + glow * 0.2})`;
+  }
 }
 
 function sampleAudio() {
@@ -125,13 +165,17 @@ function sampleAudio() {
   analyser.getByteTimeDomainData(timeArray);
 
   const gain = Number(controls.gain.value);
-  const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
-  const level = Math.min(1, (avg / 128) * gain);
+  const norm = dataArray.map((v) => v / 255);
+  const rms = Math.sqrt(norm.reduce((a, b) => a + b * b, 0) / norm.length);
+  const level = Math.min(1, Math.pow(rms * gain * 2, 1.1));
+
+  const bassBins = dataArray.slice(0, Math.max(8, Math.floor(dataArray.length * 0.12)));
+  const bassAvg = bassBins.reduce((a, b) => a + b, 0) / bassBins.length / 255;
 
   const sensitivity = Number(controls.sensitivity.value);
-  state.beatEnergy = state.beatEnergy * 0.9 + level * 0.1;
-  const beat = level > state.beatEnergy * (1 + 0.25 * sensitivity) ? 1 : 0;
-  if (beat) state.beatEnergy = level;
+  state.beatEnergy = state.beatEnergy * 0.82 + bassAvg * 0.18;
+  const beat = bassAvg > state.beatEnergy * (1 + 0.2 * sensitivity) ? 1 : 0;
+  if (beat) state.beatEnergy = bassAvg * 1.05;
 
   return { level, beat, waveform: [...timeArray] };
 }
@@ -193,13 +237,15 @@ function project({ x, y, z }, depth) {
   return { x: x * scale, y: y * scale };
 }
 
-function drawMesh(vertices, color, lineWidth) {
-  ctx.strokeStyle = color;
-  ctx.lineWidth = lineWidth;
+function drawMesh(vertices, colorFn, lineWidth) {
   for (let i = 0; i < vertices.length; i++) {
     for (let j = i + 1; j < vertices.length; j++) {
       const a = vertices[i];
       const b = vertices[j];
+      ctx.strokeStyle = colorFn(i + j, vertices.length + i + j);
+      ctx.lineWidth = lineWidth;
+      ctx.shadowColor = ctx.strokeStyle;
+      ctx.shadowBlur = 12 + Number(controls.bloom.value) * 24;
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
       ctx.lineTo(b.x, b.y);
@@ -227,8 +273,9 @@ function renderFrame() {
   requestAnimationFrame(renderFrame);
   const { level, beat, waveform } = sampleAudio();
   state.time += 0.016;
-  state.rotation += 0.0015 * Number(controls.timebase.value) + level * 0.01;
-  state.hue = (state.hue + 0.2 + beat * 20) % 360;
+  state.rotation += 0.0015 * Number(controls.timebase.value) + level * 0.02 + beat * 0.015;
+  const colorRate = Number(controls.colorRate.value);
+  state.hue = (state.hue + (0.4 + level * 10) * colorRate + beat * 40 * colorRate) % 360;
 
   clearCanvas(Number(controls.trail.value));
   ctx.save();
@@ -244,10 +291,11 @@ function renderFrame() {
   const osc = oscillator(state.time, level);
   const mode = controls.reactiveMode.value;
   const lineWidth = 1.2 + level * 3 + Number(controls.bloom.value) * 2;
+  const program = controls.colorProgram.value;
 
   for (let i = 0; i < layers; i++) {
     const layerScale = i === 0 ? 1 : i === 3 ? 0.5 : i === 4 ? 0.25 : 1 - i * 0.18;
-    const offset = reactiveOffset(mode, level, beat, i) + osc * 0.2;
+    const offset = reactiveOffset(mode, level, beat, i) + osc * 0.2 + beat * 40;
     const radius = baseRadius * layerScale + offset;
     const verts = buildVertices(dim, count, radius, level, osc);
     const projected = verts.map((v) => {
@@ -256,8 +304,8 @@ function renderFrame() {
     });
 
     const hue = hueForPalette();
-    const stroke = `hsla(${(hue + i * 24) % 360}, 90%, ${60 - i * 6}%, ${0.85 + beat * 0.2})`;
-    drawMesh(projected, stroke, lineWidth);
+    const colorFn = (idx, total) => programColor(program, idx, total, (hue + i * 18) % 360, level, beat);
+    drawMesh(projected, colorFn, lineWidth + beat * 2 + level * 1.5);
   }
 
   ctx.restore();

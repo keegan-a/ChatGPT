@@ -47,6 +47,18 @@
           </select>
         </label>
         <div class="row">
+          <label class="control">Color rate<input type="range" id="colorRate" min="0.2" max="3" step="0.05" value="1.2" /><span class="value" data-for="colorRate"></span></label>
+          <label class="control">Color program
+            <select id="colorProgram">
+              <option value="rainbow">Rainbow trail</option>
+              <option value="dots">Dotted beam</option>
+              <option value="lines">Striped lines</option>
+              <option value="retro90">Retro 90s</option>
+              <option value="retro2000">Retro 2000s</option>
+            </select>
+          </label>
+        </div>
+        <div class="row">
           <label class="control">Trace trail<input type="range" id="trail" min="0.1" max="0.95" step="0.01" value="0.75" /><span class="value" data-for="trail"></span></label>
           <label class="control">Bloom<input type="range" id="bloom" min="0" max="1.2" step="0.05" value="0.45" /><span class="value" data-for="bloom"></span></label>
         </div>

@@ -21,6 +21,8 @@ Open `index.html` in any modern browser. No build steps required.
 
 ### Reactivity
 - **Reactive mode**: Choose how motion responds to audio: *Pulse*, *Zig-zag*, *Orbit*, or *Swarm*.
+- **Color rate**: Scales how fast hues rotate, with audio energy pushing them faster.
+- **Color program**: Choose lighting programs (Rainbow trail, Dotted beam, Striped lines, Retro 90s, Retro 2000s) for RGBW-style motion patterns.
 - **Trace trail**: Controls persistence; higher values leave longer ghost trails.
 - **Bloom**: Adds weight to line thickness and glow.
 - **Hue drift**: Shifts palette hues over time.
@@ -34,9 +36,9 @@ Open `index.html` in any modern browser. No build steps required.
 - **Trace gain**: How bright the captured waveform trace appears on the display.
 
 ## What changed
-- Rebuilt the renderer for stronger, beat-visible motion with new reactive styles and heavier analyser gain.
-- Added palette-driven color cycling, waveform tracing, and multi-voice oscillators that modulate mesh radius and wobble.
-- Simplified the UI into clear sections so controls read like oscilloscope knobs instead of scattered options.
+- Rebuilt analyser sampling with RMS gain and bass-aware beat gating so audio hits visibly drive motion.
+- Added color rate/program controls with RGBW trails (rainbows, dots, stripes, retro palettes) tied to beat and energy for vivid lighting programs.
+- Tuned reactive offsets and oscillation depth to give clearer audio-driven displacement while keeping the UI grouped into oscilloscope-like sections.
 
 ## Contributing
 See `AGENTS.md` for the multi-agent workflow (scope → architecture → tests → implementation → debug → review → docs). Each role has clear responsibilities; follow the sequence to keep changes organized and well-reviewed.
