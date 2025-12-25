@@ -1,0 +1,8 @@
+{
+  "name": "capacitor-app",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "cap:init": "node ./scripts/cap-sync.mjs"
+  }
+}
