@@ -1,0 +1,73 @@
+:root {
+  color-scheme: light dark;
+}
+
+body {
+  margin: 0;
+  font-family: 'Space Grotesk', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: radial-gradient(circle at top, #0b1f3f, #000000 65%);
+  color: #ffffff;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.offline {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.offline__panel {
+  max-width: 480px;
+  background: rgba(0, 0, 0, 0.7);
+  border: 2px solid rgba(0, 255, 255, 0.4);
+  border-radius: 12px;
+  padding: 2.5rem 2rem;
+  text-align: center;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+}
+
+.offline__icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.offline__panel h1 {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.offline__panel p {
+  line-height: 1.6;
+  margin-bottom: 1.5rem;
+}
+
+.offline__panel a {
+  color: #7fe7ff;
+}
+
+.offline__steps {
+  text-align: left;
+  padding-left: 1.25rem;
+  margin-bottom: 2rem;
+}
+
+.offline__panel button {
+  border: 2px solid #7fe7ff;
+  background: transparent;
+  color: #7fe7ff;
+  padding: 0.75rem 1.75rem;
+  border-radius: 999px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.offline__panel button:hover,
+.offline__panel button:focus-visible {
+  background: rgba(127, 231, 255, 0.1);
+}
