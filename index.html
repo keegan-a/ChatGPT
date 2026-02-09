@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nostalgia Budget Builder</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link
+      rel="preconnect"
+      href="https://fonts.googleapis.com"
+    />
+    <link
+      rel="preconnect"
+      href="https://fonts.gstatic.com"
+      crossorigin
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Space+Grotesk:wght@300;400;500;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="noise-overlay"></div>
+    <header class="banner">
+      <h1>Budget Builder 95</h1>
+      <p class="tagline">
+        Dial-up your finances with a custom budget inspired by a typical
+        millennial's lifestyle.
+      </p>
+    </header>
+
+    <main class="app-frame">
+      <section
+        class="panel panel-income"
+        data-window
+        data-default-left="32"
+        data-default-top="64"
+        data-default-width="320"
+        data-default-height="340"
+      >
+        <div class="window-chrome">
+          <div class="window-title-bar" data-drag-handle>
+            <span class="window-title">Weekly Income</span>
+            <div class="window-controls" aria-hidden="true">
+              <button type="button" class="window-btn" tabindex="-1">_</button>
+              <button type="button" class="window-btn" tabindex="-1">□</button>
+              <button type="button" class="window-btn" tabindex="-1">×</button>
+            </div>
+          </div>
+          <div class="window-content">
+            <h2 class="sr-only">Weekly Income</h2>
+            <div class="input-group">
+              <label for="weeklyIncome">Enter your weekly income ($)</label>
+              <input type="number" id="weeklyIncome" min="0" step="0.01" />
+            </div>
+            <div class="scope-toggle">
+              <span>View amounts as:</span>
+              <div class="chip-group" id="scopeChooser">
+                <button class="chip active" data-scope="daily">Daily</button>
+                <button class="chip" data-scope="weekly">Weekly</button>
+                <button class="chip" data-scope="monthly">Monthly</button>
+                <button class="chip" data-scope="yearly">Yearly</button>
+              </div>
+            </div>
+            <div class="snapshot" id="incomeSnapshot"></div>
+          </div>
+          <div class="resize-handle" data-resize-handle></div>
+        </div>
+      </section>
+
+      <section
+        class="panel panel-budget"
+        data-window
+        data-default-left="384"
+        data-default-top="96"
+        data-default-width="560"
+        data-default-height="520"
+      >
+        <div class="window-chrome">
+          <div class="window-title-bar" data-drag-handle>
+            <span class="window-title">Recommended Starter Budget</span>
+            <div class="window-controls" aria-hidden="true">
+              <button type="button" class="window-btn" tabindex="-1">_</button>
+              <button type="button" class="window-btn" tabindex="-1">□</button>
+              <button type="button" class="window-btn" tabindex="-1">×</button>
+            </div>
+          </div>
+          <div class="window-content">
+            <div class="panel-header">
+              <p>
+                These categories mirror common millennial expenses (rent, food,
+                subscriptions, and more). Edit any value or add your own.
+              </p>
+            </div>
+            <table class="budget-table">
+              <thead>
+                <tr>
+                  <th>Category</th>
+                  <th class="align-right">Amount</th>
+                  <th>Notes</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="budgetBody"></tbody>
+            </table>
+            <form id="customCategoryForm" class="custom-form">
+              <h3>Add custom category</h3>
+              <div class="form-grid">
+                <label>
+                  Name
+                  <input type="text" id="customName" required />
+                </label>
+                <label>
+                  Weekly amount ($)
+                  <input type="number" id="customAmount" min="0" step="0.01" required />
+                </label>
+                <label class="full">
+                  Notes
+                  <input type="text" id="customNotes" placeholder="Optional detail" />
+                </label>
+              </div>
+              <button type="submit" class="btn-primary">Add category</button>
+            </form>
+          </div>
+          <div class="resize-handle" data-resize-handle></div>
+        </div>
+      </section>
+
+      <section
+        class="panel panel-summary"
+        data-window
+        data-default-left="104"
+        data-default-top="448"
+        data-default-width="520"
+        data-default-height="440"
+      >
+        <div class="window-chrome">
+          <div class="window-title-bar" data-drag-handle>
+            <span class="window-title">Budget Pulse</span>
+            <div class="window-controls" aria-hidden="true">
+              <button type="button" class="window-btn" tabindex="-1">_</button>
+              <button type="button" class="window-btn" tabindex="-1">□</button>
+              <button type="button" class="window-btn" tabindex="-1">×</button>
+            </div>
+          </div>
+          <div class="window-content">
+            <div class="pulse-grid" id="summaryGrid"></div>
+            <div class="future-section">
+              <h3>Future Value Forecast</h3>
+              <p>
+                Project your spending and savings into the future. Totals update
+                as you tweak income and categories.
+              </p>
+              <div class="future-grid" id="futureGrid"></div>
+            </div>
+          </div>
+          <div class="resize-handle" data-resize-handle></div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span>&copy; 1995-2024 Budget Builder Labs</span>
+      <span class="footer-links">
+        <a href="#">GeoCities Mirror</a>
+        <a href="#">AOL Keyword: BUDGET</a>
+      </span>
+    </footer>
+
+    <template id="rowTemplate">
+      <tr>
+        <td data-field="name"></td>
+        <td class="align-right">
+          <div class="amount-editor">
+            <span class="currency">$</span>
+            <input type="number" min="0" step="0.01" data-field="amount" />
+          </div>
+        </td>
+        <td>
+          <input type="text" data-field="notes" placeholder="Add notes" />
+        </td>
+        <td>
+          <button class="icon-button" data-action="delete" title="Remove">
+            ✖
+          </button>
+        </td>
+      </tr>
+    </template>
+
+    <script src="app.js" type="module"></script>
+  </body>
+</html>
