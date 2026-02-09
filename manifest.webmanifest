@@ -1,0 +1,17 @@
+{
+  "name": "Budget Builder 95",
+  "short_name": "Budget95",
+  "description": "Retro desktop budget planner with Windows and Mac nostalgia themes.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0050ef",
+  "theme_color": "#0050ef",
+  "icons": [
+    {
+      "src": "icons/budget-builder-icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nostalgia Budget Builder</title>
+    <meta name="theme-color" content="#0050ef" />
+    <link rel="icon" type="image/svg+xml" href="icons/budget-builder-icon.svg" />
+    <link rel="apple-touch-icon" href="icons/budget-builder-icon.svg" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="stylesheet" href="styles.css" />
+    <link
+      rel="preconnect"
+      href="https://fonts.googleapis.com"
+    />
+    <link
+      rel="preconnect"
+      href="https://fonts.gstatic.com"
+      crossorigin
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Space+Grotesk:wght@300;400;500;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body class="theme-win95">
+    <div class="noise-overlay"></div>
+    <header class="banner">
+      <h1>Budget Builder 95</h1>
+      <p class="tagline">
+        Dial-up your finances with a custom budget inspired by a typical
+        millennial's lifestyle.
+      </p>
+    </header>
+
+    <main class="app-frame">
+      <section
+        class="panel window panel-income"
+        aria-labelledby="panelIncomeTitle"
+        data-window-id="income"
+        data-window-title="Weekly Income"
+        data-width="360"
+        data-height="420"
+        data-min-width="320"
+        data-min-height="320"
+        data-x="24"
+        data-y="0"
+      >
+        <header class="window-header" data-drag-handle>
+          <h2 class="window-title" id="panelIncomeTitle">Weekly Income</h2>
+          <div class="window-controls" aria-hidden="true">
+            <button
+              class="window-control"
+              data-window-action="minimize"
+              type="button"
+              title="Minimize"
+              aria-label="Minimize window"
+            ></button>
+            <button
+              class="window-control"
+              data-window-action="maximize"
+              type="button"
+              title="Maximize"
+              aria-label="Maximize window"
+            ></button>
+            <button
+              class="window-control"
+              data-window-action="close"
+              type="button"
+              title="Close"
+              aria-label="Close window"
+            ></button>
+          </div>
+        </header>
+        <div class="window-body">
+          <div class="input-group">
+            <label for="weeklyIncome">Enter your weekly income ($)</label>
+            <input type="number" id="weeklyIncome" min="0" step="0.01" />
+          </div>
+          <div class="scope-toggle">
+            <span>View amounts as:</span>
+            <div class="chip-group" id="scopeChooser">
+              <button class="chip active" data-scope="daily">Daily</button>
+              <button class="chip" data-scope="weekly">Weekly</button>
+              <button class="chip" data-scope="monthly">Monthly</button>
+              <button class="chip" data-scope="yearly">Yearly</button>
+            </div>
+          </div>
+          <div class="snapshot" id="incomeSnapshot"></div>
+        </div>
+      </section>
+
+      <section
+        class="panel window panel-budget"
+        aria-labelledby="panelBudgetTitle"
+        data-window-id="categories"
+        data-window-title="Categories Planner"
+        data-width="560"
+        data-height="540"
+        data-min-width="420"
+        data-min-height="360"
+        data-x="420"
+        data-y="48"
+      >
+        <header class="window-header" data-drag-handle>
+          <h2 class="window-title" id="panelBudgetTitle">
+            Recommended Starter Budget
+          </h2>
+          <div class="window-controls" aria-hidden="true">
+            <button
+              class="window-control"
+              data-window-action="minimize"
+              type="button"
+              title="Minimize"
+              aria-label="Minimize window"
+            ></button>
+            <button
+              class="window-control"
+              data-window-action="maximize"
+              type="button"
+              title="Maximize"
+              aria-label="Maximize window"
+            ></button>
+            <button
+              class="window-control"
+              data-window-action="close"
+              type="button"
+              title="Close"
+              aria-label="Close window"
+            ></button>
+          </div>
+        </header>
+        <div class="window-body">
+          <div class="panel-intro">
+            <p>
+              These categories mirror common millennial expenses (rent, food,
+              subscriptions, and more). Edit any value or add your own.
+            </p>
+          </div>
+          <table class="budget-table">
+            <thead>
+              <tr>
+                <th>Category</th>
+                <th class="align-right">Amount</th>
+                <th>Cadence</th>
+                <th class="align-right" id="scopeColumnHeader"></th>
+                <th>Notes</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="budgetBody"></tbody>
+          </table>
+          <div class="panel-actions">
+            <button class="primary" id="launchShowcase" type="button">
+              Launch Final Budget Showcase
+            </button>
+          </div>
+          <form id="customCategoryForm" class="custom-form">
+            <h3>Add custom category</h3>
+            <div class="form-grid">
+              <label>
+                Name
+                <input type="text" id="customName" required />
+              </label>
+              <label>
+                Amount ($)
+                <input
+                  type="number"
+                  id="customAmount"
+                  min="0"
+                  step="0.01"
+                  required
+                />
+              </label>
+              <label>
+                Cadence
+                <select id="customFrequency" required>
+                  <option value="weekly" selected>Weekly</option>
+                  <option value="monthly">Monthly</option>
+                  <option value="daily">Daily</option>
+                </select>
+              </label>
+              <label class="full">
+                Notes
+                <input
+                  type="text"
+                  id="customNotes"
+                  placeholder="Optional detail"
+                />
+              </label>
+            </div>
+            <button type="submit" class="btn-primary">Add category</button>
+          </form>
+        </div>
+      </section>
+
+      <section
+        class="panel window panel-summary"
+        aria-labelledby="panelSummaryTitle"
+        data-window-id="summary"
+        data-window-title="Budget Pulse"
+        data-width="520"
+        data-height="520"
+        data-min-width="380"
+        data-min-height="360"
+        data-x="96"
+        data-y="440"
+      >
+        <header class="window-header" data-drag-handle>
+          <h2 class="window-title" id="panelSummaryTitle">Budget Pulse</h2>
+          <div class="window-controls" aria-hidden="true">
+            <button
+              class="window-control"
+              data-window-action="minimize"
+              type="button"
+              title="Minimize"
+              aria-label="Minimize window"
+            ></button>
+            <button
+              class="window-control"
+              data-window-action="maximize"
+              type="button"
+              title="Maximize"
+              aria-label="Maximize window"
+            ></button>
+            <button
+              class="window-control"
+              data-window-action="close"
+              type="button"
+              title="Close"
+              aria-label="Close window"
+            ></button>
+          </div>
+        </header>
+        <div class="window-body">
+          <div class="pulse-grid" id="summaryGrid"></div>
+          <div class="future-section">
+            <h3>Future Value Forecast</h3>
+            <p>
+              Project your spending and savings into the future. Totals update
+              as you tweak income and categories.
+            </p>
+            <div class="future-grid" id="futureGrid"></div>
+          </div>
+        </div>
+      </section>
+      <section
+        class="panel window panel-showcase hidden-window"
+        aria-labelledby="panelShowcaseTitle"
+        data-window-id="showcase"
+        data-window-title="Final Budget Showcase"
+        data-width="520"
+        data-height="580"
+        data-min-width="420"
+        data-min-height="420"
+        data-initial-state="closed"
+        data-x="120"
+        data-y="120"
+      >
+        <header class="window-header" data-drag-handle>
+          <h2 class="window-title" id="panelShowcaseTitle">Final Budget Showcase</h2>
+          <div class="window-controls" aria-hidden="true">
+            <button
+              class="window-control"
+              data-window-action="minimize"
+              type="button"
+              title="Minimize"
+              aria-label="Minimize window"
+            ></button>
+            <button
+              class="window-control"
+              data-window-action="maximize"
+              type="button"
+              title="Maximize"
+              aria-label="Maximize window"
+            ></button>
+            <button
+              class="window-control"
+              data-window-action="close"
+              type="button"
+              title="Close"
+              aria-label="Close window"
+            ></button>
+          </div>
+        </header>
+        <div class="window-body showcase-body" id="finalShowcaseBody">
+          <div class="showcase-hero">
+            <div class="showcase-title">Your Nostalgia Budget</div>
+            <div class="showcase-caption" id="showcaseScopeLabel"></div>
+            <div class="showcase-summary" id="showcaseSummary"></div>
+            <div class="showcase-totals" id="showcaseTotals"></div>
+          </div>
+          <div class="showcase-content">
+            <div class="showcase-metrics" id="showcaseMetrics"></div>
+            <ul class="showcase-categories" id="showcaseCategories"></ul>
+          </div>
+          <div class="showcase-actions">
+            <button class="primary" id="showcasePrintButton" type="button">
+              Save Showcase as PDF
+            </button>
+          </div>
+        </div>
+      </section>
+      <section
+        class="panel window panel-snake hidden-window"
+        aria-labelledby="panelSnakeTitle"
+        data-window-id="snake"
+        data-window-title="Snake"
+        data-initial-state="closed"
+        data-width="320"
+        data-height="420"
+        data-min-width="280"
+        data-min-height="320"
+        data-x="720"
+        data-y="160"
+      >
+        <header class="window-header" data-drag-handle>
+          <h2 class="window-title" id="panelSnakeTitle">Snake</h2>
+          <div class="window-controls" aria-hidden="true">
+            <button
+              class="window-control"
+              data-window-action="minimize"
+              type="button"
+              title="Minimize"
+              aria-label="Minimize window"
+            ></button>
+            <button
+              class="window-control"
+              data-window-action="maximize"
+              type="button"
+              title="Maximize"
+              aria-label="Maximize window"
+            ></button>
+            <button
+              class="window-control"
+              data-window-action="close"
+              type="button"
+              title="Close"
+              aria-label="Close window"
+            ></button>
+          </div>
+        </header>
+        <div class="window-body">
+          <div class="snake-controls">
+            <button type="button" class="btn-primary" id="snakeStart">Start</button>
+            <button type="button" class="btn-primary" id="snakePause">Pause</button>
+            <button type="button" class="btn-primary" id="snakeReset">Reset</button>
+          </div>
+          <canvas id="snakeCanvas" width="260" height="260" aria-label="Snake playfield"></canvas>
+          <p class="snake-status" id="snakeStatus" role="status">Use arrow keys to play.</p>
+        </div>
+      </section>
+    </main>
+
+    <template id="rowTemplate">
+      <tr>
+        <td data-field="name"></td>
+        <td class="align-right">
+          <div class="amount-editor">
+            <span class="currency">$</span>
+            <input type="number" min="0" step="0.01" data-field="amount" />
+          </div>
+        </td>
+        <td>
+          <select data-field="frequency">
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+            <option value="daily">Daily</option>
+          </select>
+        </td>
+        <td class="align-right" data-field="equivalent"></td>
+        <td>
+          <input type="text" data-field="notes" placeholder="Add notes" />
+        </td>
+        <td>
+          <button class="icon-button" data-action="delete" title="Remove">
+            ✖
+          </button>
+        </td>
+      </tr>
+    </template>
+
+    <div class="start-menu" id="startMenu" role="menu" aria-hidden="true">
+      <div class="start-menu__sidebar">
+        <span class="start-menu__brand">Budget<br />Builder</span>
+      </div>
+      <div class="start-menu__content">
+        <div class="start-menu__group">
+          <h3>Windows</h3>
+          <div class="start-menu__list" id="startWindowList"></div>
+        </div>
+        <div class="start-menu__group">
+          <h3>Tools</h3>
+          <button class="start-menu__item" data-open-window="showcase">
+            📊 Final Budget Showcase
+          </button>
+          <button class="start-menu__item" data-action="screensaver">
+            🪄 Activate Screensaver
+          </button>
+        </div>
+        <div class="start-menu__group">
+          <h3>Games</h3>
+          <button class="start-menu__item" data-open-window="snake">
+            🐍 Classic Snake
+          </button>
+        </div>
+        <div class="start-menu__group">
+          <h3>Aesthetics</h3>
+          <button class="start-menu__item" data-theme="win95">Windows 95</button>
+          <button class="start-menu__item" data-theme="vista">Windows Vista</button>
+          <button class="start-menu__item" data-theme="mac">2000s Macintosh</button>
+        </div>
+      </div>
+    </div>
+
+    <footer class="footer">
+      <span>&copy; 1995-2024 Budget Builder Labs</span>
+      <span class="footer-links">
+        <a href="#">GeoCities Mirror</a>
+        <a href="#">AOL Keyword: BUDGET</a>
+      </span>
+    </footer>
+
+    <div class="taskbar" role="toolbar" aria-label="Desktop taskbar">
+      <button class="start-button" id="startButton" type="button" aria-haspopup="true">
+        <span class="start-button__flag"></span>
+        Start
+      </button>
+      <div class="taskbar-buttons" id="taskbarButtons"></div>
+      <div class="taskbar-spacer"></div>
+      <div class="taskbar-clock" id="taskbarClock" aria-live="polite"></div>
+    </div>
+
+    <div class="screensaver" id="screensaver" aria-hidden="true">
+      <canvas id="screensaverCanvas" width="1280" height="720" aria-hidden="true"></canvas>
+      <button class="screensaver-exit" type="button" id="screensaverExit">
+        Exit Screensaver
+      </button>
+    </div>
+
+    <script src="app.js" type="module"></script>
+  </body>
+</html>
