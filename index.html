@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nostalgia Budget Suite</title>
+    <meta name="theme-color" content="#0078d7" />
+    <link rel="manifest" href="manifest.json" />
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' ry='6' fill='%230078d7'/%3E%3Cpath d='M6 8h20v12a6 6 0 01-6 6H12a6 6 0 01-6-6z' fill='%23002354'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%23fff'/%3E%3Ccircle cx='16' cy='16' r='3.5' fill='%230078d7'/%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <noscript>This application requires JavaScript to run.</noscript>
+    <div id="desktop" class="theme-win95">
+      <canvas id="pipes-canvas" aria-hidden="true"></canvas>
+      <div id="wallpaper"></div>
+      <header class="taskbar" role="toolbar" aria-label="Desktop taskbar">
+        <button id="start-button" class="taskbar__start" aria-haspopup="true" aria-expanded="false">Start</button>
+        <nav id="taskbar-items" class="taskbar__items" aria-label="Open windows"></nav>
+        <div class="taskbar__extras">
+          <button id="screensaver-button" class="taskbar__icon" title="Start screensaver" aria-controls="pipes-canvas">Pipes</button>
+          <select id="theme-switcher" class="taskbar__theme" aria-label="Switch theme">
+            <option value="win95">Windows 95</option>
+            <option value="winxp">Windows XP</option>
+            <option value="winvista">Windows Vista</option>
+            <option value="mac2000s">2000s Macintosh</option>
+          </select>
+          <time id="taskbar-clock" aria-live="polite"></time>
+        </div>
+      </header>
+      <section id="start-menu" class="start-menu" role="menu" aria-label="Start menu">
+        <div class="start-menu__header">Nostalgia Budget Suite</div>
+        <input id="start-search" class="start-menu__search" type="search" placeholder="Type here to search" aria-label="Search features" />
+        <ul class="start-menu__list" role="menu"></ul>
+      </section>
+      <main id="window-layer" tabindex="-1"></main>
+    </div>
+    <script src="app.js" type="module"></script>
+  </body>
+</html>
