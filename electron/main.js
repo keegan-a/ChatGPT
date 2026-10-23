@@ -1,4 +1,7 @@
-const { app, BrowserWindow, Menu, nativeImage, session } = require('electron');
+const { app, BrowserWindow, Menu, nativeImage, session, ipcMain, shell } = require('electron');
+const { pathToFileURL } = require('url');
+const { isSafeExternalURL, createNavigationPolicy } = require('./security');
+const trustedWindows = new Map();
 const path = require('path');
 const fs = require('fs');
 
@@ -75,7 +78,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: false
+      sandbox: true
     }
   });
 
@@ -85,6 +88,19 @@ function createWindow() {
   console.log('getAppPath:', appPath);
   console.log('index path:', indexFile);
   const devServer = process.env.BUDGET95_DEV_SERVER || 'http://localhost:8000/';
+  const mayNavigate = createNavigationPolicy({
+    productionURL: PRODUCTION_ORIGIN, devURL: devServer, isDev,
+    localURLs: [pathToFileURL(indexFile).href, pathToFileURL(offlineFile).href]
+  });
+  trustedWindows.set(window.webContents.id, mayNavigate);
+  window.on('closed', () => trustedWindows.delete(window.webContents.id));
+  window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  window.webContents.on('will-navigate', (event, targetURL) => {
+    if (!mayNavigate(targetURL)) event.preventDefault();
+  });
+  window.webContents.on('will-redirect', (event, targetURL) => {
+    if (!mayNavigate(targetURL)) event.preventDefault();
+  });
   if (isDev) {
     window.loadURL(devServer).catch((error) => {
       console.warn(`Falling back to packaged assets because ${devServer} was unreachable:`, error.message);
@@ -141,6 +157,14 @@ const menuTemplate = [
 ];
 
 app.whenReady().then(() => {
+  ipcMain.handle('budget95:open-external', async (event, targetURL) => {
+    const policy = trustedWindows.get(event.sender.id);
+    if (!policy || event.senderFrame !== event.sender.mainFrame ||
+        !policy(event.senderFrame.url) || !isSafeExternalURL(targetURL)) {
+      throw new Error('External navigation is not permitted');
+    }
+    await shell.openExternal(targetURL);
+  });
   const contentSecurityPolicy = "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; connect-src 'self' https://api.openai.com; img-src 'self' data: blob:; media-src 'self'; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none';";
 
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
