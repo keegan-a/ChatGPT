@@ -7,16 +7,21 @@ on:
     types: [published]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build-web:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          node-version: 20
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24.22.1'
       - name: Install dependencies
-        run: npm install
+        run: npm ci
       - name: Build web bundle
         run: npm run build:web
       - name: Deploy to S3/CloudFront
@@ -34,12 +39,14 @@ jobs:
     runs-on: windows-latest
     needs: build-web
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          node-version: 20
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24.22.1'
       - name: Install dependencies
-        run: npm install
+        run: npm ci
       - name: Prepare web bundle
         run: npm run build:web
       - name: Package desktop shells
@@ -47,7 +54,7 @@ jobs:
           BUDGET95_BUILD_TAG: ${{ github.run_id }}
         run: npm run electron:build
       - name: Upload installers
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: budgetbuilder95-desktop
           path: release/**

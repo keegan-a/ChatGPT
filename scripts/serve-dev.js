@@ -32,14 +32,17 @@ function sendNotFound(res) {
 
 const server = http.createServer((req, res) => {
   const parsed = url.parse(req.url);
-  let filePath = decodeURIComponent(parsed.pathname || '/');
+  let filePath;
+  try { filePath = decodeURIComponent(parsed.pathname || '/'); }
+  catch { res.writeHead(400); res.end('Bad request'); return; }
 
   if (filePath.endsWith('/')) {
     filePath = path.join(filePath, 'index.html');
   }
 
-  const resolved = path.join(rootDir, filePath);
-  if (!resolved.startsWith(rootDir)) {
+  const resolved = path.resolve(rootDir, '.' + filePath);
+  const relative = path.relative(rootDir, resolved);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
     sendNotFound(res);
     return;
   }
@@ -64,7 +67,7 @@ const server = http.createServer((req, res) => {
   });
 });
 
-server.listen(port, () => {
+server.listen(port, '127.0.0.1', () => {
   console.log(`Budget Builder 95 dev server running at http://localhost:${port}/`);
   console.log(`Serving files from ${rootDir}`);
 });
